@@ -52,8 +52,8 @@ Extract MySQL tables from an Open edX instance, taking the parameters from envir
 import json
 import os
 
-from extract_course_structures.course_structures_extractor import CourseStructuresExtractor
-from extract_sql_tables.sql_extractor import SqlExtractor
+from course_structures_extractor.course_structures_extractor import CourseStructuresExtractor
+from sql_tables_extractor.sql_extractor import SqlExtractor
 
 from panorama_logger.setup_logger import log
 
