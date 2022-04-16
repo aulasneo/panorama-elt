@@ -1,2 +1,2 @@
 # panorama-extract-load
-Tools to extract and load data to the datalake for Panorama analytics
+Tools to extract data and load to the datalake for Panorama analytics
