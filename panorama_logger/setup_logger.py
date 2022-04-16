@@ -1,3 +1,6 @@
+import logging
+import sys
+
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s  %(name)s  %(levelname)s: '
