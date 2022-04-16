@@ -20,17 +20,17 @@ class SqlExtractor:
 
     def __init__(
             self,
-            panorama_raw_data_bucket,
-            aws_access_key,
-            aws_secret_access_key,
-            aws_region,
-            mysql_username,
-            mysql_password,
-            mysql_host,
-            mysql_database,
-            panorama_mysql_tables,
-            table_partitions,
-            base_partitions,
+            panorama_raw_data_bucket: str,
+            mysql_database: str,
+            panorama_mysql_tables: str,
+            aws_region: str = 'us-east-1',
+            aws_access_key: str = None,
+            aws_secret_access_key: str = None,
+            mysql_username: str = None,
+            mysql_password: str = None,
+            mysql_host: str = 'localhost',
+            table_partitions: str = None,
+            base_partitions: str = None,
     ):
 
         session = boto3.Session(

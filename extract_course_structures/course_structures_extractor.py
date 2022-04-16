@@ -20,14 +20,14 @@ class CourseStructuresExtractor:
 
     def __init__(
             self,
-            aws_access_key,
-            aws_secret_access_key,
             panorama_s3_bucket,
-            mongodb_username,
-            mongodb_password,
-            mongodb_host,
-            mongodb_database,
-            base_partitions,
+            mongodb_database: str,
+            aws_access_key: str = None,
+            aws_secret_access_key: str = None,
+            mongodb_host: str = 'localhost',
+            mongodb_username: str = None,
+            mongodb_password: str = None,
+            base_partitions: str = None,
     ):
         self.base_partitions = base_partitions
         self.panorama_s3_bucket = panorama_s3_bucket
