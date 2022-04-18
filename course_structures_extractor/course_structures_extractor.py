@@ -4,6 +4,7 @@ versions of each course. The table will be saved as a csv file and uploaded to S
 
 """
 import csv
+import os
 import urllib.parse
 
 import boto3
@@ -315,6 +316,9 @@ class CourseStructuresExtractor:
 
             except (ClientError, S3UploadFailedError, ParamValidationError) as e:
                 log.error("Error uploading to S3: {}".format(e))
+            finally:
+                # Clean the file
+                os.remove(filename)
 
         else:
             log.warning("No panorama bucket specified, skipping s3 upload")
