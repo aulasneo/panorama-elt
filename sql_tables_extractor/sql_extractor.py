@@ -149,8 +149,8 @@ class SqlExtractor:
         key = os.path.join(prefix, filename)
         log.debug("Saving and uploading {} to {}/{}".format(filename, bucket, key))
 
-        # As some fields may include doublequotes, we need to set the csv writer to
-        # use backslash as escapechar and not double doublequotes.
+        # As some fields may include double quotes, we need to set the csv writer to
+        # use backslash as escape char and not double, double quotes.
         # Unfortunately, there are cases where there is field content which already
         # have escaped chars. There is a bug in csv writer by which it will not
         # escape preexistent escape chars (see https://bugs.python.org/issue12178)
@@ -178,6 +178,9 @@ class SqlExtractor:
 
         except ClientError as e:
             log.error(e)
+        finally:
+            # Clean the file
+            os.remove(filename)
 
     def query_athena(self, query: str, db: str, workgroup: str) -> None:
         """
