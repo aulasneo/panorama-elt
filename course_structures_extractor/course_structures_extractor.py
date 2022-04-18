@@ -27,9 +27,11 @@ class CourseStructuresExtractor:
             mongodb_host: str = 'localhost',
             mongodb_username: str = None,
             mongodb_password: str = None,
-            base_partitions: str = None,
+            base_partitions: dict = None,
+            base_prefix: str = None,
     ):
         self.base_partitions = base_partitions
+        self.base_prefix = base_prefix
         self.panorama_s3_bucket = panorama_s3_bucket
 
         session = boto3.Session(
@@ -293,10 +295,14 @@ class CourseStructuresExtractor:
         if self.panorama_s3_bucket:
             log.debug("Uploading to s3 bucket {}".format(self.panorama_s3_bucket))
 
-            # Base prefix of the file in the S3 buckets. The first folder is the table name.
-            # Next, the list of base partitions definitions for all tables in Hive format
+            # Base prefix of the file in the S3 buckets. If there is a base_prefix configured, then we start from there.
+            # Otherwise, we start from the root of the bucket. The next folder is the table name.
             # The complete prefix will be the base prefix plus any specific partitions defined for the table
-            base_prefix_list = ['course_structures']
+            if self.base_prefix:
+                base_prefix_list = [self.base_prefix, 'course_structures']
+            else:
+                base_prefix_list = ['course_structures']
+
             for key, value in self.base_partitions.items():
                 base_prefix_list.append("{}={}".format(key, urllib.parse.quote(value)))
             base_prefix = "/".join(base_prefix_list)

@@ -1,0 +1,45 @@
+panorama_raw_data_bucket: ''
+base_prefix: openedx
+aws_access_key: ''
+aws_secret_access_key: ''
+aws_region: us-east-1
+mysql_username: root
+mysql_password: ''
+mysql_host: localhost
+mysql_database: 'edxapp'
+mongodb_host: localhost
+mongodb_username: ''
+mongodb_password: ''
+mongodb_database: edxapp
+datalake_database: panorama
+datalake_workgroup: panorama
+base_partitions:
+  - key: lms
+    value: lms.example.com
+tables:
+  - name: auth_user
+    datalake_table_name: auth_user_raw
+  - name: student_courseenrollment
+    datalake_table_name: student_courseenrollment_raw
+  - name: auth_userprofile
+    datalake_table_name: auth_userprofile_raw
+  - name: student_courseaccessrole
+    datalake_table_name: student_courseaccessrole_raw
+  - name: course_overviews_courseoverview
+    datalake_table_name: course_overviews_courseoverview_raw
+  - name: courseware_studentmodule
+    datalake_table_name: courseware_studentmodule_raw
+    partitions:
+      partition_fields:
+        - course_id
+#        - student_id
+      interval: '2 hour'
+      timestamp_field: modified
+  - name: grades_persistentcoursegrade
+    datalake_table_name: grades_persistentcoursegrade_raw
+  - name: student_manualenrollmentaudit
+    datalake_table_name: student_manualenrollmentaudit_raw
+  - name: student_courseenrollmentallowed
+    datalake_table_name: student_courseenrollmentallowed_raw
+  - name: certificates_generatedcertificate
+    datalake_table_name: certificates_generatedcertificate

@@ -12,6 +12,7 @@ import csv
 import boto3
 from botocore.exceptions import ClientError
 import pymysql
+from typing import List
 
 from panorama_logger.setup_logger import log
 
@@ -20,17 +21,19 @@ class SqlExtractor:
 
     def __init__(
             self,
-            panorama_raw_data_bucket: str,
             mysql_database: str,
-            panorama_mysql_tables: str,
+            panorama_mysql_tables: List[str],
+            panorama_raw_data_bucket: str = None,
             aws_region: str = 'us-east-1',
             aws_access_key: str = None,
             aws_secret_access_key: str = None,
             mysql_username: str = None,
             mysql_password: str = None,
             mysql_host: str = 'localhost',
-            table_partitions: str = None,
-            base_partitions: str = None,
+            table_partitions: dict = None,
+            base_partitions: dict = None,
+            base_prefix: str = None,
+            table_fields: dict = None,
     ):
 
         session = boto3.Session(
@@ -49,10 +52,12 @@ class SqlExtractor:
         )
 
         self.cur = conn.cursor()
-        self.tables = panorama_mysql_tables.split(',')
+        self.tables = panorama_mysql_tables
 
         self.table_partitions = table_partitions
         self.base_partitions = base_partitions
+        self.base_prefix = base_prefix
+        self.table_fields = table_fields
 
         self.db = mysql_database
         self.panorama_raw_data_bucket = panorama_raw_data_bucket
@@ -60,13 +65,18 @@ class SqlExtractor:
         # This list is to store athena query executions
         self.executions = []
 
-    def get_fields(self, table: str) -> list:
+    def get_fields(self, table: str, force_query: bool = False) -> list:
         """
         Returns a list of fields of the table in the database using an existing mysql cursor
 
         :param table: table name
+        :param force_query: (optional) if set to True, will query the db even if there is a definition set
         :return: list[str] of fields
         """
+
+        # If the field list is declared in the settings file, return it.
+        if self.table_fields and self.table_fields.get(table) and not force_query:
+            return self.table_fields.get(table)
 
         fields_query = \
             'select COLUMN_NAME ' \
@@ -82,6 +92,18 @@ class SqlExtractor:
         log.debug("Fields in table: {}".format(fields))
 
         return list(f[0] for f in fields)
+
+    def get_all_fields(self):
+        """
+        Queries all the tables and returns a dict of fields to update the settings
+        :return: dict in the form { table_name: [ field ... ], ...}
+        """
+
+        table_fields = {}
+        for table in self.tables:
+            table_fields[table] = self.get_fields(table, force_query=True)
+
+        return table_fields
 
     def get_rows(self, table: str, field_list: list = None,
                  where: str = None, distinct: bool = False) -> pymysql.cursors.Cursor:
@@ -213,10 +235,15 @@ class SqlExtractor:
 
             fields = self.get_fields(table=table)
 
-            # Base prefix of the file in the S3 buckets. The first folder is the table name.
+            # Base prefix of the file in the S3 buckets. If there is a base_prefix configured, then we start from there.
+            # Otherwise, we start from the root of the bucket. The next folder is the table name.
             # Next, the list of base partitions definitions for all tables in Hive format
             # The complete prefix will be the base prefix plus any specific partitions defined for the table
-            base_prefix_list = [table]
+            if self.base_prefix:
+                base_prefix_list = [self.base_prefix, table]
+            else:
+                base_prefix_list = [table]
+
             for key, value in self.base_partitions.items():
                 base_prefix_list.append("{}={}".format(key, urllib.parse.quote(value)))
             base_prefix = "/".join(base_prefix_list)
