@@ -5,44 +5,65 @@ Data can be partitioned by a list of base partitions and a set of fields.
 
 """
 import os
-from uuid import uuid4
-import urllib.parse
 import csv
 
-import boto3
-from botocore.exceptions import ClientError
 import pymysql
 from typing import List
 
+from panorama_datalake.panorama_datalake import PanoramaDatalake
 from panorama_logger.setup_logger import log
+
+
+def save_rows(filename: str, fields: list, rows: iter) -> None:
+    """
+    Saves the result of a query as a csv file
+
+    :param filename: filename to save (usually <table name>.csv)
+    :param fields: list of field names
+    :param rows: result of a query execution
+    :return: None
+    """
+
+    log.debug("Saving {}".format(filename))
+
+    # As some fields may include double quotes, we need to set the csv writer to
+    # use backslash as escape char and not double, double quotes.
+    # Unfortunately, there are cases where there is field content which already
+    # have escaped chars. There is a bug in csv writer by which it will not
+    # escape preexistent escape chars (see https://bugs.python.org/issue12178)
+    # This should be fixed by python 3.10. To keep compatibility with previous
+    # versions, we unpack all the data and escape backslashes in all strings.
+    # In python 3.10, the next block can be removed and use
+    # write.writerows(rows) directly
+    rows_list = []
+    for row in rows:
+        fields_list = []
+        for field in row:
+            if type(field) is str:
+                fields_list.append(field.replace('\\', '\\\\'))
+            else:
+                fields_list.append(field)
+        rows_list.append(fields_list)
+
+    with open(filename, 'w') as f:
+        write = csv.writer(f, doublequote=False, escapechar='\\')
+        write.writerow(fields)
+        write.writerows(rows_list)
 
 
 class SqlExtractor:
 
     def __init__(
             self,
+            datalake: PanoramaDatalake,
             mysql_database: str,
-            panorama_mysql_tables: List[str],
-            panorama_raw_data_bucket: str = None,
-            aws_region: str = 'us-east-1',
-            aws_access_key: str = None,
-            aws_secret_access_key: str = None,
+            mysql_tables: List[str],
             mysql_username: str = None,
             mysql_password: str = None,
             mysql_host: str = 'localhost',
-            table_partitions: dict = None,
-            base_partitions: dict = None,
-            base_prefix: str = None,
+            field_partitions: dict = None,
             table_fields: dict = None,
     ):
-
-        session = boto3.Session(
-            aws_access_key_id=aws_access_key,
-            aws_secret_access_key=aws_secret_access_key,
-            region_name=aws_region
-        )
-        self.s3_client = session.client('s3')
-        self.athena = session.client('athena')
 
         conn = pymysql.connect(
             host=mysql_host, port=3306,
@@ -52,18 +73,13 @@ class SqlExtractor:
         )
 
         self.cur = conn.cursor()
-        self.tables = panorama_mysql_tables
+        self.tables = mysql_tables
 
-        self.table_partitions = table_partitions
-        self.base_partitions = base_partitions
-        self.base_prefix = base_prefix
         self.table_fields = table_fields
+        self.field_partitions = field_partitions
 
+        self.datalake = datalake
         self.db = mysql_database
-        self.panorama_raw_data_bucket = panorama_raw_data_bucket
-
-        # This list is to store athena query executions
-        self.executions = []
 
     def get_fields(self, table: str, force_query: bool = False) -> list:
         """
@@ -78,13 +94,14 @@ class SqlExtractor:
         if self.table_fields and self.table_fields.get(table) and not force_query:
             return self.table_fields.get(table)
 
-        fields_query = \
-            'select COLUMN_NAME ' \
-            'from INFORMATION_SCHEMA.COLUMNS ' \
-            'WHERE TABLE_NAME = "{table}" ' \
-            'AND TABLE_SCHEMA = "{db}"'.format(
-                table=table,
-                db=self.db)
+        fields_query = """
+            select COLUMN_NAME
+            from INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = "{table}"
+            AND TABLE_SCHEMA = "{db}"
+            """.format(
+            table=table,
+            db=self.db)
 
         self.cur.execute(fields_query)
         fields = self.cur.fetchall()
@@ -106,7 +123,7 @@ class SqlExtractor:
         return table_fields
 
     def get_rows(self, table: str, field_list: list = None,
-                 where: str = None, distinct: bool = False) -> pymysql.cursors.Cursor:
+                 where: str = None, distinct: bool = False) -> iter:
         """
         Returns the rows of the mysql table.
 
@@ -132,131 +149,26 @@ class SqlExtractor:
 
         return rows
 
-    def upload_rows(self, bucket: str, prefix: str, table: str,
-                    fields: list, rows: pymysql.cursors.Cursor) -> None:
+    def extract_mysql_tables(self, force: bool = False):
         """
-        Saves the result of a query as a csv file and upload to s3.
+        Extracts mysql tables and sends them to the datalake
 
-        :param bucket: s3 bucket name
-        :param prefix: path in the bucket to the file
-        :param fields: list of field names
-        :param table: name of the table. The file will have this name and csv extension
-        :param rows: result of a query execution
-        :return: None
+        :param force: Forces a full update of all the partitions
+        :return:
         """
-
-        filename = "{}.csv".format(table)
-        key = os.path.join(prefix, filename)
-        log.debug("Saving and uploading {} to {}/{}".format(filename, bucket, key))
-
-        # As some fields may include double quotes, we need to set the csv writer to
-        # use backslash as escape char and not double, double quotes.
-        # Unfortunately, there are cases where there is field content which already
-        # have escaped chars. There is a bug in csv writer by which it will not
-        # escape preexistent escape chars (see https://bugs.python.org/issue12178)
-        # This should be fixed by python 3.10. To keep compatibility with previous
-        # versions, we unpack all the data and escape backslashes in all strings.
-        # In python 3.10, the next block can be removed and use
-        # write.writerows(rows) directly
-        rows_list = []
-        for row in rows:
-            fields_list = []
-            for field in row:
-                if type(field) is str:
-                    fields_list.append(field.replace('\\', '\\\\'))
-                else:
-                    fields_list.append(field)
-            rows_list.append(fields_list)
-
-        with open(filename, 'w') as f:
-            write = csv.writer(f, doublequote=False, escapechar='\\')
-            write.writerow(fields)
-            write.writerows(rows_list)
-
-        try:
-            self.s3_client.upload_file(filename, bucket, key)
-
-        except ClientError as e:
-            log.error(e)
-        finally:
-            # Clean the file
-            os.remove(filename)
-
-    def query_athena(self, query: str, db: str, workgroup: str) -> None:
-        """
-        Sends a query to Athena and waits for a response
-        :param db: database name
-        :param workgroup: Athena workgroup
-        :param query: SQL query
-        :return: None
-        """
-
-        crt = str(uuid4())
-        try:
-            execution = self.athena.start_query_execution(
-                QueryString=query,
-                ClientRequestToken=crt,
-                QueryExecutionContext={
-                    'Database': db
-                },
-                WorkGroup=workgroup
-            )
-            self.executions.append(execution)
-
-        except ClientError as e:
-            log.error("boto3 error trying to execute athena query")
-            log.error(e)
-            return
-
-    def get_athena_query_execution(self, execution):
-
-        execution_id = execution.get('QueryExecutionId')
-        response = self.athena.get_query_execution(QueryExecutionId=execution_id)
-        state = response.get('QueryExecution').get('Status').get('State')
-
-        return state
-
-    def get_athena_executions(self):
-        """
-        Show the results of all athena executions
-        :return: None
-        """
-        results = {}
-        for execution in self.executions:
-            result = self.get_athena_query_execution(execution)
-            if result not in results:
-                results[result] = 1
-            else:
-                results[result] += 1
-
-        log.info("Summary of athena executions to update partitions statuses: {}".format(results))
-
-    def extract_mysql_tables(self):
-
         for table in self.tables:
+
             log.info("Extracting {}".format(table))
 
             fields = self.get_fields(table=table)
+            filename = "{}.csv".format(table)
 
-            # Base prefix of the file in the S3 buckets. If there is a base_prefix configured, then we start from there.
-            # Otherwise, we start from the root of the bucket. The next folder is the table name.
-            # Next, the list of base partitions definitions for all tables in Hive format
-            # The complete prefix will be the base prefix plus any specific partitions defined for the table
-            if self.base_prefix:
-                base_prefix_list = [self.base_prefix, table]
-            else:
-                base_prefix_list = [table]
-
-            for key, value in self.base_partitions.items():
-                base_prefix_list.append("{}={}".format(key, urllib.parse.quote(value)))
-            base_prefix = "/".join(base_prefix_list)
-            log.debug("Base prefix: {}".format(base_prefix))
-
-            if table in self.table_partitions:
+            partitions = self.field_partitions.get(table)
+            if partitions:
 
                 # Process tables with partitions
-                partition_fields = self.table_partitions.get(table).get('partition_fields')
-                timestamp_field = self.table_partitions.get(table).get('timestamp_field')
+                partition_fields = partitions.get('partition_fields')
+                timestamp_field = partitions.get('timestamp_field')
 
                 for partition_field in partition_fields:
                     fields.remove(partition_field)
@@ -264,28 +176,17 @@ class SqlExtractor:
                 # If there is an interval configured for the table, we do an incremental update.
                 # Incremental updates work with partitions. We first query which partitions have records with changes in
                 # the last interval configured. Then the full partition is updated.
-                update_interval = self.table_partitions.get(table).get('interval')
+                update_interval = partitions.get('interval')
                 interval = None
                 if update_interval:
 
-                    # If the folder with the base partition is empty, we do a full upload
-                    try:
-                        table_bucket = self.s3_client.list_objects_v2(
-                            Bucket=self.panorama_raw_data_bucket,
-                            Prefix=base_prefix)
-
-                        if table_bucket.get('Contents'):
-                            # interval will be used in a where clause to query all the partitions with changes
-                            interval = "{} >= date_sub(now(), interval {})".format(timestamp_field, update_interval)
-                            log.debug("Doing incremental update of the last {}".format(update_interval))
-                        else:
-                            interval = None
-                            log.info("Update interval configured in {} but s3 base folder {} is empty. "
-                                     "Doing a full dump".format(update_interval, base_prefix))
-
-                    except self.s3_client.exceptions.NoSuchBucket as e:
-                        log.critical("NoSuchBucket exception getting bucket: {}".format(e))
-                        exit(1)
+                    if force:
+                        interval = None
+                        log.info("Forcing a full dump")
+                    else:
+                        # interval will be used in a where clause to query all the partitions with changes
+                        interval = "{} >= date_sub(now(), interval {})".format(timestamp_field, update_interval)
+                        log.debug("Doing incremental update of the last {}".format(update_interval))
 
                 # Get a list of all distinct partition field values in the recordset within the last increment period
                 values_list = self.get_rows(table=table, field_list=partition_fields, distinct=True, where=interval)
@@ -302,60 +203,26 @@ class SqlExtractor:
                         where_clauses.append("{} = '{}'".format(partition_field, value))
                     where_clause = " and ".join(where_clauses)
 
-                    # Build the path to the csv file, including the partitions in Hive format
-                    prefix_list = [base_prefix]
-                    for partition_field, value in zip(partition_fields, values):
-                        prefix_list.append("{}={}".format(partition_field, urllib.parse.quote(value)))
-                    prefix = '/'.join(prefix_list)
-
-                    log.info("Getting partition {}/{}: {}".format(counter, len(values_list), prefix))
+                    log.info("Getting partition {}/{}".format(counter, len(values_list)))
                     counter += 1
 
                     # Query mysql table
                     rows = self.get_rows(table=table, field_list=fields, where=where_clause)
 
-                    # Save and upload to s3
-                    self.upload_rows(bucket=self.panorama_raw_data_bucket,
-                                     prefix=prefix,
-                                     table=table,
-                                     fields=fields,
-                                     rows=rows)
+                    save_rows(filename=filename, fields=fields, rows=rows)
 
-                    # Update partitions in the datalake
-                    partitions = []
-                    partitions_uri = []
-                    for partition_field, value in self.base_partitions.items():
-                        partitions.append("{} = '{}'".format(partition_field, value))
-                        partitions_uri.append("{}={}".format(partition_field, urllib.parse.quote(value)))
+                    self.datalake.upload_table_from_file(filename=filename, table=table,
+                                                         field_partitions=zip(partition_fields, values),
+                                                         update_partitions=True)
 
-                    for partition_field, value in zip(partition_fields, values):
-                        partitions.append("{} = '{}'".format(partition_field, value))
-                        partitions_uri.append("{}={}".format(partition_field, urllib.parse.quote(value)))
-
-                    partitions_clause = ','.join(partitions)
-                    location = 's3://{}/{}/{}/'.format(self.panorama_raw_data_bucket, table, '/'.join(partitions_uri))
-
-                    # Use Athena to load the partitions
-                    query = "ALTER TABLE {} ADD IF NOT EXISTS PARTITION ({}) LOCATION '{}'".format(
-                        self.table_partitions.get(table).get('datalake_table'),
-                        partitions_clause,
-                        location
-                    )
-
-                    log.debug("Updating partitions with {}".format(query))
-                    self.query_athena(
-                        query=query,
-                        db=self.table_partitions.get(table).get('datalake_db'),
-                        workgroup=self.table_partitions.get(table).get('workgroup'))
+                    os.remove(filename)
 
             else:
 
                 # Process tables without partitions (except for the lms)
                 rows = self.get_rows(table=table)
-                self.upload_rows(bucket=self.panorama_raw_data_bucket,
-                                 prefix=base_prefix,
-                                 table=table,
-                                 fields=fields,
-                                 rows=rows)
+                save_rows(filename=filename, fields=fields, rows=rows)
 
-        self.get_athena_executions()
+                self.datalake.upload_table_from_file(filename=filename, table=table)
+
+                os.remove(filename)

@@ -4,14 +4,9 @@ versions of each course. The table will be saved as a csv file and uploaded to S
 
 """
 import csv
-import os
-import urllib.parse
-
-import boto3
-from boto3.exceptions import S3UploadFailedError
-from botocore.exceptions import ClientError, ParamValidationError
 from pymongo import MongoClient
 
+from panorama_datalake.panorama_datalake import PanoramaDatalake
 from panorama_logger.setup_logger import log
 
 filename = 'course_structures.csv'
@@ -21,26 +16,14 @@ class CourseStructuresExtractor:
 
     def __init__(
             self,
-            panorama_s3_bucket,
+            datalake: PanoramaDatalake,
             mongodb_database: str,
-            aws_access_key: str = None,
-            aws_secret_access_key: str = None,
             mongodb_host: str = 'localhost',
             mongodb_username: str = None,
             mongodb_password: str = None,
-            base_partitions: dict = None,
-            base_prefix: str = None,
     ):
-        self.base_partitions = base_partitions
-        self.base_prefix = base_prefix
-        self.panorama_s3_bucket = panorama_s3_bucket
 
-        session = boto3.Session(
-            aws_access_key_id=aws_access_key,
-            aws_secret_access_key=aws_secret_access_key
-        )
-
-        self.s3_client = session.client('s3')
+        self.datalake = datalake
 
         if mongodb_username:
             connection_string = "mongodb://{}:{}@{}/{}".format(mongodb_username, mongodb_password, mongodb_host,
@@ -292,35 +275,6 @@ class CourseStructuresExtractor:
                 ]
                 csv_writer.writerow(row)
 
-        # Upload to s3
-        if self.panorama_s3_bucket:
-            log.debug("Uploading to s3 bucket {}".format(self.panorama_s3_bucket))
-
-            # Base prefix of the file in the S3 buckets. If there is a base_prefix configured, then we start from there.
-            # Otherwise, we start from the root of the bucket. The next folder is the table name.
-            # The complete prefix will be the base prefix plus any specific partitions defined for the table
-            if self.base_prefix:
-                base_prefix_list = [self.base_prefix, 'course_structures']
-            else:
-                base_prefix_list = ['course_structures']
-
-            for key, value in self.base_partitions.items():
-                base_prefix_list.append("{}={}".format(key, urllib.parse.quote(value)))
-            base_prefix = "/".join(base_prefix_list)
-            log.debug("Base prefix: {}".format(base_prefix))
-
-            try:
-                key = "/".join([base_prefix, 'course_structures.csv'])
-                self.s3_client.upload_file(filename, self.panorama_s3_bucket, key)
-                log.info("Uploaded to {}".format(key))
-
-            except (ClientError, S3UploadFailedError, ParamValidationError) as e:
-                log.error("Error uploading to S3: {}".format(e))
-            finally:
-                # Clean the file
-                os.remove(filename)
-
-        else:
-            log.warning("No panorama bucket specified, skipping s3 upload")
+        self.datalake.upload_table_from_file(filename=filename, table='course_structures')
 
         log.debug("Process completed")
