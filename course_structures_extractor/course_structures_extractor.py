@@ -55,7 +55,7 @@ class CourseStructuresExtractor:
 
         return structs
 
-    def get_active_versions(self) -> dict:
+    def get_active_versions(self):
         """
         Returns a dict of courses in the active_versions collection in the form:
             { published_branch_id: { 'org': org, 'course': course, 'run': run }},...
