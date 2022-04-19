@@ -4,6 +4,8 @@ versions of each course. The table will be saved as a csv file and uploaded to S
 
 """
 import csv
+import os
+
 from pymongo import MongoClient
 from pymongo.errors import OperationFailure
 
@@ -285,5 +287,7 @@ class CourseStructuresExtractor:
                 csv_writer.writerow(row)
 
         self.datalake.upload_table_from_file(filename=filename, table='course_structures')
+
+        os.remove(filename)
 
         log.debug("Process completed")
