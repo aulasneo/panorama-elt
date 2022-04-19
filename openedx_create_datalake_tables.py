@@ -64,8 +64,6 @@ if __name__ == '__main__':
                 field_partitions=partition_fields,
                 datalake_table=table_setting.get('datalake_table_name')
             )
-            if not partition_fields:
-                datalake.update_partitions(table_setting.get('name'))
 
         else:
             log.warning("No fields defined for table {}. Skipping table creation".format(table_setting.get('name')))
