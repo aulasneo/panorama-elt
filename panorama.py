@@ -62,9 +62,13 @@ def cli():
     )
 
 
-@cli.command(help='Extracts and uploads all MySQL tables and Open edXs course structures')
+@cli.command(help='Extracts and uploads all MySQL tables defined in the settings file')
 @click.option('--force', is_flag=True, help='Force upload all partitions. False by default')
 def upload_sql_tables(force):
+    _upload_sql_tables(force)
+
+
+def _upload_sql_tables(force):
     mysql_username = settings.get('mysql_username', 'root')
     mysql_password = settings.get('mysql_password')
     mysql_host = settings.get('mysql_host', '127.0.0.1')
@@ -123,7 +127,7 @@ def upload_course_structures():
 @cli.command(help='Uploads all tables defined in the configuration file plus the course structures table')
 @click.option('--force', is_flag=True, help='Force upload all partitions. False by default')
 def openedx_upload_all(force):
-    upload_sql_tables()
+    _upload_sql_tables(force)
     upload_course_structures()
 
 
