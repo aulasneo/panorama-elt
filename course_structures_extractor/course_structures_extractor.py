@@ -5,6 +5,7 @@ versions of each course. The table will be saved as a csv file and uploaded to S
 """
 import csv
 from pymongo import MongoClient
+from pymongo.errors import OperationFailure
 
 from panorama_datalake.panorama_datalake import PanoramaDatalake
 from panorama_logger.setup_logger import log
@@ -67,17 +68,22 @@ class CourseStructuresExtractor:
         cursor = self.mongodb.modulestore.active_versions.find({'versions.published-branch': {'$exists': True}})
 
         active_versions = dict()
-        for record in cursor:
-            published_branch = record.get('versions').get('published-branch')
 
-            if published_branch:
-                active_versions[published_branch] = {
-                    'org': record['org'],
-                    'course': record['course'],
-                    'run': record['run']
-                }
-            else:
-                log.error("No published_branch information found in record {}".format(record))
+        try:
+            for record in cursor:
+                published_branch = record.get('versions').get('published-branch')
+
+                if published_branch:
+                    active_versions[published_branch] = {
+                        'org': record['org'],
+                        'course': record['course'],
+                        'run': record['run']
+                    }
+                else:
+                    log.error("No published_branch information found in record {}".format(record))
+        except OperationFailure as e:
+            log.error("Error accessing MongoDB: {}".format(e))
+            return None
 
         log.info("{} active versions found".format(len(active_versions)))
         return active_versions
