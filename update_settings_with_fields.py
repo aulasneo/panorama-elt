@@ -36,7 +36,7 @@ def update_settings(yaml_settings: dict):
         mysql_password=mysql_password,
         mysql_host=mysql_host,
         mysql_database=mysql_database,
-        panorama_mysql_tables=panorama_mysql_tables,
+        mysql_tables=panorama_mysql_tables,
     )
 
     table_fields = sql_extractor.get_all_fields()
