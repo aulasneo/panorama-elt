@@ -134,7 +134,7 @@ class PanoramaDatalake:
                 partitions_uri.append("{}={}".format(partition_field, urllib.parse.quote(value)))
 
         if field_partitions:
-            for partition_field, value in field_partitions:
+            for partition_field, value in field_partitions.items():
                 partitions.append("{} = '{}'".format(partition_field, value))
                 partitions_uri.append("{}={}".format(partition_field, urllib.parse.quote(value)))
 
@@ -194,7 +194,7 @@ class PanoramaDatalake:
                 prefix_list.append("{}={}".format(key, urllib.parse.quote(value)))
 
         if field_partitions:
-            for key, value in field_partitions:
+            for key, value in field_partitions.items():
                 prefix_list.append("{}={}".format(key, urllib.parse.quote(value)))
 
         prefix_list.append(filename)

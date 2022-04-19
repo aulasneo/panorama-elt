@@ -211,8 +211,12 @@ class SqlExtractor:
 
                     save_rows(filename=filename, fields=fields, rows=rows)
 
+                    field_partitions = {}
+                    for k, v in zip(partition_fields, values):
+                        field_partitions[k] = v
+
                     self.datalake.upload_table_from_file(filename=filename, table=table,
-                                                         field_partitions=zip(partition_fields, values),
+                                                         field_partitions=field_partitions,
                                                          update_partitions=True)
 
                     os.remove(filename)
