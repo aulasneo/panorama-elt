@@ -14,7 +14,7 @@ from panorama_logger.setup_logger import log
 
 
 settings = {}
-datalake: PanoramaDatalake = None
+datalake = None
 config_file = ''
 
 
@@ -63,8 +63,8 @@ def cli():
 
 
 @cli.command(help='Extracts and uploads all MySQL tables and Open edXs course structures')
-@click.option('--force', default=False, help='Force upload all partitions. False by default')
-def upload_sql_tables(force: bool = False):
+@click.option('--force', is_flag=True, help='Force upload all partitions. False by default')
+def upload_sql_tables(force):
     mysql_username = settings.get('mysql_username', 'root')
     mysql_password = settings.get('mysql_password')
     mysql_host = settings.get('mysql_host', '127.0.0.1')
@@ -121,9 +121,9 @@ def upload_course_structures():
 
 
 @cli.command(help='Uploads all tables defined in the configuration file plus the course structures table')
-@click.option('--force', default=False, help='Force upload all partitions. False by default')
-def openedx_upload_all(force: bool = None):
-    upload_sql_tables(force)
+@click.option('--force', is_flag=True, help='Force upload all partitions. False by default')
+def openedx_upload_all(force):
+    upload_sql_tables()
     upload_course_structures()
 
 
@@ -235,5 +235,3 @@ def update_settings():
 if __name__ == '__main__':
     cli()
 
-    # extract_and_load_sql_tables(force=True)
-    # extract_and_load_course_structures()
