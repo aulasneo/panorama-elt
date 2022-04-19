@@ -222,6 +222,9 @@ class CourseStructuresExtractor:
 
         # Get the active versions of each course
         active_versions = self.get_active_versions()
+        if not active_versions:
+            log.warning("No active versions found")
+            return
         log.debug("Found {} active versions".format(len(active_versions)))
 
         # Get the structures of all the active versions
