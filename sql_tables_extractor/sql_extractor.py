@@ -227,6 +227,6 @@ class SqlExtractor:
                 rows = self.get_rows(table=table)
                 save_rows(filename=filename, fields=fields, rows=rows)
 
-                self.datalake.upload_table_from_file(filename=filename, table=table)
+                self.datalake.upload_table_from_file(filename=filename, table=table, update_partitions=True)
 
                 os.remove(filename)
