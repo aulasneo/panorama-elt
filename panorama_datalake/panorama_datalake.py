@@ -118,6 +118,7 @@ class PanoramaDatalake:
 
     def update_partitions(self, table, field_partitions: iter = None, datalake_table_name: str = None):
         """
+        Updates the partitions of the table
 
         :param table: Original name of the table. Present in the s3 key
         :param field_partitions: (optional) field partitions if any

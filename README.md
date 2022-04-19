@@ -22,6 +22,6 @@ make install
 To run the script once an hour, add a line similar to the following one to the crontab:
 
 ```shell
-0 * * * * cd panorama-extract-load && venv/bin/python openedx_extract_and_load.py >> panorama.log
+0 * * * * cd panorama-extract-load && venv/bin/python panorama.py >> panorama.log
 
 ```
