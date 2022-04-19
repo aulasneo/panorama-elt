@@ -13,12 +13,7 @@ from panorama_datalake.panorama_datalake import PanoramaDatalake
 from panorama_logger.setup_logger import log
 
 
-settings = {}
-datalake = None
-config_file = ''
-
-
-def load_settings(config_file: str) -> dict:
+def load_settings() -> dict:
     with open(config_file, 'r') as f:
         yaml_settings = yaml.safe_load(f)
 
@@ -27,39 +22,7 @@ def load_settings(config_file: str) -> dict:
 
 @click.group()
 def cli():
-    global settings
-    global datalake
-
-    global config_file
-
-    config_file = os.getenv('PANORAMA_SETTINGS_FILE', default='panorama_settings.yaml')
-    settings = load_settings(config_file=config_file)
-
-    panorama_raw_data_bucket = settings.get('panorama_raw_data_bucket')
-    if not panorama_raw_data_bucket:
-        log.error("panorama_raw_data_bucket must be set")
-        exit(1)
-
-    datalake_table_names = {}
-    for table in settings.get('tables'):
-        if 'datalake_table_name' in table:
-            datalake_table_names[table.get('name')] = table.get('datalake_table_name')
-
-    base_partitions = {}
-    for base_partition in settings.get('base_partitions'):
-        base_partitions[base_partition.get('key')] = base_partition.get('value')
-
-    datalake = PanoramaDatalake(
-        aws_access_key=settings.get('aws_access_key'),
-        aws_secret_access_key=settings.get('aws_secret_access_key'),
-        aws_region=settings.get('aws_region', 'us-east-1'),
-        datalake_db=settings.get('datalake_database'),
-        datalake_workgroup=settings.get('datalake_workgroup'),
-        base_prefix=settings.get('base_prefix'),
-        bucket=panorama_raw_data_bucket,
-        base_partitions=base_partitions,
-        datalake_table_names=datalake_table_names,
-    )
+    pass
 
 
 @cli.command(help='Extracts and uploads all MySQL tables defined in the settings file')
@@ -107,6 +70,10 @@ def _upload_sql_tables(force):
 
 @cli.command(help='Upload course structures only')
 def upload_course_structures():
+    _upload_course_structures()
+
+
+def _upload_course_structures():
     # Extract course structures from MongoDB
     mongodb_username = settings.get('mongodb_username')
     mongodb_password = settings.get('mongodb_password')
@@ -128,11 +95,15 @@ def upload_course_structures():
 @click.option('--force', is_flag=True, help='Force upload all partitions. False by default')
 def openedx_upload_all(force):
     _upload_sql_tables(force)
-    upload_course_structures()
+    _upload_course_structures()
 
 
 @cli.command(help='Creates datalake tables for all tables defined in the settings file')
 def create_datalake_tables():
+    _create_datalake_tables()
+
+
+def _create_datalake_tables():
     # Create tables for mysql
     for table_setting in settings.get('tables'):
 
@@ -160,6 +131,10 @@ def create_datalake_tables():
 
 @cli.command(help='Creates datalake table for the course structures')
 def create_course_structures_datalake_table():
+    _create_course_structures_datalake_table()
+
+
+def _create_course_structures_datalake_table():
     # Create course_structures table
 
     fields = [
@@ -190,11 +165,11 @@ def create_course_structures_datalake_table():
 
 @cli.command(help='Creates datalake tables for all tables defined in the settings file and the course structures')
 def openedx_create_datalake_tables():
-    create_datalake_tables()
-    create_course_structures_datalake_table()
+    _create_datalake_tables()
+    _create_course_structures_datalake_table()
 
 
-def save_settings(config_file: str) -> None:
+def save_settings() -> None:
     with open(config_file, 'w') as f:
         yaml.safe_dump(settings, f, sort_keys=False)
 
@@ -206,7 +181,7 @@ def update_settings():
     mysql_host = settings.get('mysql_host', '127.0.0.1')
     mysql_database = settings.get('mysql_database', 'edxapp')
 
-    panorama_mysql_tables = [table.get('name') for table in settings.get('tables')]
+    panorama_mysql_tables = [t.get('name') for t in settings.get('tables')]
 
     sql_extractor = SqlExtractor(
         datalake=datalake,
@@ -231,11 +206,40 @@ def update_settings():
 
     settings['tables'] = new_tables_settings
 
-    save_settings(config_file=config_file)
+    save_settings()
 
     click.echo("{} updated".format(config_file))
 
 
 if __name__ == '__main__':
-    cli()
 
+    config_file = os.getenv('PANORAMA_SETTINGS_FILE', default='panorama_settings.yaml')
+    settings = load_settings()
+
+    panorama_raw_data_bucket = settings.get('panorama_raw_data_bucket')
+    if not panorama_raw_data_bucket:
+        log.error("panorama_raw_data_bucket must be set")
+        exit(1)
+
+    datalake_table_names = {}
+    for table in settings.get('tables'):
+        if 'datalake_table_name' in table:
+            datalake_table_names[table.get('name')] = table.get('datalake_table_name')
+
+    base_partitions = {}
+    for base_partition in settings.get('base_partitions'):
+        base_partitions[base_partition.get('key')] = base_partition.get('value')
+
+    datalake = PanoramaDatalake(
+        aws_access_key=settings.get('aws_access_key'),
+        aws_secret_access_key=settings.get('aws_secret_access_key'),
+        aws_region=settings.get('aws_region', 'us-east-1'),
+        datalake_db=settings.get('datalake_database'),
+        datalake_workgroup=settings.get('datalake_workgroup'),
+        base_prefix=settings.get('base_prefix'),
+        bucket=panorama_raw_data_bucket,
+        base_partitions=base_partitions,
+        datalake_table_names=datalake_table_names,
+    )
+
+    cli()
