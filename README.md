@@ -99,6 +99,15 @@ venv/bin/activate/python panorama.py <commands> [OPTIONS]
 ```
 
 ## First run
+
+Before running the commands that upload the data to the datalake, you should run the following command
+to create the tables in the datalake. Failure to do that will cause errors when the upload routines tries
+to update partitions in nonexistent tables.
+
+```shell
+venv/bin/python panorama.py create-datalake-tables
+```
+
 If there are tables with incremental updates enabled, you will have to make an initial run
 to upload all partitions, even those that didn't change lately.
 If the tables are large, this can consume lots of CPU resources and take a long time to complete.
