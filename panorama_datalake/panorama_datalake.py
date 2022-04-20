@@ -208,7 +208,8 @@ class PanoramaDatalake:
         if update_partitions:
             self.update_partitions(table=table, field_partitions=field_partitions)
 
-    def create_datalake_csv_table(self, table: str, fields: list, datalake_table: str = None, field_partitions: list = None) -> None:
+    def create_datalake_csv_table(self, table: str, fields: list,
+                                  datalake_table: str = None, field_partitions: list = None) -> None:
         """
         Run an Athena query to create the csv table in the database
 
