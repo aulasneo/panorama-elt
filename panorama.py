@@ -1,5 +1,9 @@
 """
-Extract MySQL tables from an Open edX instance
+Extract MySQL tables from an Open edX instance.
+
+Usage:
+python panorama.py --help
+
 """
 import yaml
 import os
@@ -14,10 +18,23 @@ from panorama_logger.setup_logger import log
 
 
 def load_settings() -> dict:
+    """
+    Load config_file as settings
+    :return: settings structure
+    """
     with open(config_file, 'r') as f:
         yaml_settings = yaml.safe_load(f)
 
     return yaml_settings
+
+
+def save_settings() -> None:
+    """
+    Save config_file from settings
+    :return: settings structure
+    """
+    with open(config_file, 'w') as f:
+        yaml.safe_dump(settings, f, sort_keys=False)
 
 
 @click.group()
@@ -28,10 +45,20 @@ def cli():
 @cli.command(help='Extracts and uploads all MySQL tables defined in the settings file')
 @click.option('--force', is_flag=True, help='Force upload all partitions. False by default')
 def upload_sql_tables(force):
+    """
+    Click command to run _upload_sql_tables
+    :param force:
+    :return:
+    """
     _upload_sql_tables(force)
 
 
 def _upload_sql_tables(force):
+    """
+    Query MySQL tables defined in the settings and uploads to the datalake
+    :param force: boolean. Force a full dump for tables with incremental updates configured
+    :return:
+    """
     mysql_username = settings.get('mysql_username', 'root')
     mysql_password = settings.get('mysql_password')
     mysql_host = settings.get('mysql_host', '127.0.0.1')
@@ -70,10 +97,19 @@ def _upload_sql_tables(force):
 
 @cli.command(help='Upload course structures only')
 def upload_course_structures():
+    """
+    Click command to run _upload_course_structures
+    :return:
+    """
     _upload_course_structures()
 
 
 def _upload_course_structures():
+    """
+    Connects to MongoDB to retrieve a list of Open edX modulestore blocks.
+    It will create a csv file with the display name of each block and all it's parents
+    :return:
+    """
     # Extract course structures from MongoDB
     mongodb_username = settings.get('mongodb_username')
     mongodb_password = settings.get('mongodb_password')
@@ -94,16 +130,29 @@ def _upload_course_structures():
 @cli.command(help='Uploads all tables defined in the configuration file plus the course structures table')
 @click.option('--force', is_flag=True, help='Force upload all partitions. False by default')
 def openedx_upload_all(force):
+    """
+    Convenience method for Open edX installations to upload all MySQL tables and the course structures
+    :param force: boolean. Force a full dump for tables with incremental updates configured
+    :return:
+    """
     _upload_sql_tables(force)
     _upload_course_structures()
 
 
 @cli.command(help='Creates datalake tables for all tables defined in the settings file')
 def create_datalake_tables():
+    """
+    Click command to run _create_datalake_tables
+    :return:
+    """
     _create_datalake_tables()
 
 
 def _create_datalake_tables():
+    """
+    Connect to Athena and create the table definition for the MySQL tables
+    :return:
+    """
     # Create tables for mysql
     for table_setting in settings.get('tables'):
 
@@ -131,10 +180,18 @@ def _create_datalake_tables():
 
 @cli.command(help='Creates datalake table for the course structures')
 def create_course_structures_datalake_table():
+    """
+    Click command to run _create_course_structures_datalake_table
+    :return:
+    """
     _create_course_structures_datalake_table()
 
 
 def _create_course_structures_datalake_table():
+    """
+    Connect to Athena and create the table definition for the Open edX's course structures table
+    :return:
+    """
     # Create course_structures table
 
     fields = [
@@ -165,17 +222,36 @@ def _create_course_structures_datalake_table():
 
 @cli.command(help='Creates datalake tables for all tables defined in the settings file and the course structures')
 def openedx_create_datalake_tables():
+    """
+    Convenience method to create all Open edX tables
+    :return:
+    """
     _create_datalake_tables()
     _create_course_structures_datalake_table()
 
 
-def save_settings() -> None:
-    with open(config_file, 'w') as f:
-        yaml.safe_dump(settings, f, sort_keys=False)
+@cli.command(help="Clears all table configurations and sets new tables from the comma-separated list")
+@click.option('-t', '--tables', 'table_list_')
+def set_tables(table_list_: str):
+    new_tables_settings = []
+    for table_name in table_list_.split(','):
+        new_tables_settings.append({'name': table_name})
+
+    settings['tables'] = new_tables_settings
+
+    save_settings()
+
+    click.echo("Tables updated".format(config_file))
 
 
 @cli.command(help='Queries the SQL tables and updates the tables section of the settings file. Use with care.')
-def update_settings():
+def set_tables_fields():
+    """
+    Query MySQL tables and get the field list from each table defined in the settings.
+    Update the 'tables' settings with the list of fields retrieved
+    * Not recommended for Open edX installations *
+    :return:
+    """
     mysql_username = settings.get('mysql_username', 'root')
     mysql_password = settings.get('mysql_password')
     mysql_host = settings.get('mysql_host', '127.0.0.1')
@@ -213,23 +289,28 @@ def update_settings():
 
 if __name__ == '__main__':
 
+    # Load settings file
     config_file = os.getenv('PANORAMA_SETTINGS_FILE', default='panorama_settings.yaml')
     settings = load_settings()
 
+    # S3 bucket where the tables will be uploaded.
     panorama_raw_data_bucket = settings.get('panorama_raw_data_bucket')
     if not panorama_raw_data_bucket:
         log.error("panorama_raw_data_bucket must be set")
         exit(1)
 
+    # Datalake table names may differ from MySQL tables. As a convention, we add '_raw' to the table names
     datalake_table_names = {}
     for table in settings.get('tables'):
         if 'datalake_table_name' in table:
             datalake_table_names[table.get('name')] = table.get('datalake_table_name')
 
+    # List of partitions common to all tables. For Open edX, it's set to {'lms': <LMS_HOST>}.
     base_partitions = {}
     for base_partition in settings.get('base_partitions'):
         base_partitions[base_partition.get('key')] = base_partition.get('value')
 
+    # Create the datalake object
     datalake = PanoramaDatalake(
         aws_access_key=settings.get('aws_access_key'),
         aws_secret_access_key=settings.get('aws_secret_access_key'),
@@ -242,4 +323,5 @@ if __name__ == '__main__':
         datalake_table_names=datalake_table_names,
     )
 
+    # Expect the CLI command
     cli()
