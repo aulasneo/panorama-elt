@@ -22,8 +22,12 @@ def load_settings() -> dict:
     Load config_file as settings
     :return: settings structure
     """
-    with open(config_file, 'r') as f:
-        yaml_settings = yaml.safe_load(f)
+    try:
+        with open(config_file, 'r') as f:
+            yaml_settings = yaml.safe_load(f)
+    except FileNotFoundError as e:
+        log.error("No config file {} found".format(config_file))
+        exit(1)
 
     return yaml_settings
 
@@ -307,8 +311,9 @@ if __name__ == '__main__':
 
     # List of partitions common to all tables. For Open edX, it's set to {'lms': <LMS_HOST>}.
     base_partitions = {}
-    for base_partition in settings.get('base_partitions'):
-        base_partitions[base_partition.get('key')] = base_partition.get('value')
+    if 'base_partitions' in settings:
+        for base_partition in settings.get('base_partitions'):
+            base_partitions[base_partition.get('key')] = base_partition.get('value')
 
     # Create the datalake object
     datalake = PanoramaDatalake(

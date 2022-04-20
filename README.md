@@ -12,8 +12,15 @@ This utility is in charge of connecting to the MySQL and MongoDB tables and extr
 the most relevant tables. Then it uploads the data to the datalake and updates all tables and partition.
 
 ## Requirements
-Requires Python 3.5 or newer and virtualenv installed.
-`make install` will create a new virtual environment and install all dependencies 
+
+- Linux system
+- Python 3.5 or newer
+- Python3 distutils (`sudo apt install python3-distutils`)
+- make (`sudo apt install make`)
+- virtualenv (`pip install virtualenv`)
+
+`make install` will create a new virtual environment and install all further dependencies
+
 listed in `requirements.txt` 
 ## Installation
 Panorama EL can be installed in the same application host, in the databases host or in 
@@ -49,6 +56,7 @@ To set up your AWS datalake, you will need to:
 - create the Athena workgroup to keep the queries isolated from other projects
   - set the 'Query result location' to the bucket created for this workgroup
 
+See the _first run_ section bellow to complete the datalake setup. 
 
 ## Configuration
 
@@ -86,6 +94,8 @@ For Open edX usage, you will have to set the following variables:
   (e.g.: lms.example.com)
 
 ## Running the scripts
+***Before running any command, please see the next section to do the first run***
+
 The scripts must be run from the virtual environment to run. 
 So you can do in two ways (from the installation directory):
 #### Activating the virtualenv first
