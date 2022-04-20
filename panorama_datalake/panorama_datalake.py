@@ -205,7 +205,7 @@ class PanoramaDatalake:
 
         self.s3_client.upload_file(filename, self.panorama_raw_data_bucket, key)
 
-        if update_partitions:
+        if update_partitions and (self.base_partitions or field_partitions):
             self.update_partitions(table=table, field_partitions=field_partitions)
 
     def create_datalake_csv_table(self, table: str, fields: list,
