@@ -297,7 +297,7 @@ class PanoramaDatalake:
 
     def create_table_view(self, datalake_table_name: str, view_name: str, fields: list):
 
-        fields_definition = ',\n'.join(fields)
+        fields_definition = ','.join(['"{}"'.format(f) for f in fields])
 
         query = """CREATE OR REPLACE VIEW "{view_name}" AS
         SELECT {fields_definition} 
