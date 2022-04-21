@@ -294,3 +294,18 @@ class PanoramaDatalake:
 
         log.debug("Creating datalake table {} with {}".format(table, query))
         self.query_athena(query=query)
+
+    def create_table_view(self, datalake_table_name: str, view_name: str, fields: list):
+
+        fields_definition = ',\n'.join(fields)
+
+        query = """CREATE OR REPLACE VIEW "{view_name}" AS
+        SELECT {fields_definition} 
+        FROM "{database}"."{table_name}"
+        """.format(view_name=view_name,
+                   fields_definition=fields_definition,
+                   database=self.datalake_db,
+                   table_name=datalake_table_name
+                   )
+        self.query_athena(query)
+

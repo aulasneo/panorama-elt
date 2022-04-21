@@ -249,6 +249,30 @@ def set_tables(table_list_: str):
     click.echo("Tables updated".format(config_file))
 
 
+@cli.command(help='Creates views based on the tables defined')
+@click.option('--table-name', '-t', required=True)
+@click.option('--view-name', '-v', required=True)
+def create_table_view(table_name, view_name):
+    for table_setting in settings.get('tables'):
+        if table_setting.get('name') == table_name:
+
+            fields = table_setting.get('fields')
+            if fields:
+                if table_name in datalake_table_names:
+                    datalake_table_name = datalake_table_names.get(table_name)
+                else:
+                    datalake_table_name = table_name
+
+                datalake.create_table_view(datalake_table_name=datalake_table_name, view_name=view_name,
+                                           fields=fields)
+                datalake.get_athena_executions()
+                return
+            else:
+                log.warning("No fields defined for table {}".format(table_name))
+
+    log.warning("No table {} found".format(table_name))
+
+
 @cli.command(help='Queries the SQL tables and updates the tables section of the settings file. Use with care.')
 def set_tables_fields():
     """
