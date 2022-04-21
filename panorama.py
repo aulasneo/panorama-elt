@@ -15,6 +15,7 @@ from sql_tables_extractor.sql_extractor import SqlExtractor
 from panorama_datalake.panorama_datalake import PanoramaDatalake
 
 from panorama_logger.setup_logger import log
+from __about__ import __version__
 
 
 def load_settings() -> dict:
