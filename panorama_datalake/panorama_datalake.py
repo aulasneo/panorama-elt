@@ -254,9 +254,9 @@ class PanoramaDatalake:
             partitions_section = ''
 
         # The location of the table doesn't include the partitions subdirectories
-        location = 's3://{prefix}/{bucket}/{table}/'.format(
-            prefix=self.base_prefix,
+        location = 's3://{bucket}/{prefix}/{table}/'.format(
             bucket=self.panorama_raw_data_bucket,
+            prefix=self.base_prefix,
             table=table,
         )
 
