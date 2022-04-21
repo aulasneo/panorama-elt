@@ -183,3 +183,53 @@ tables:
     - modified_date
     - error_reason
     - user_id
+- name: course_groups_cohortmembership
+  fields:
+  - id
+  - course_id
+  - course_user_group_id
+  - user_id
+  datalake_table_name: course_groups_cohortmembership_raw
+- name: course_groups_coursecohort
+  fields:
+  - id
+  - assignment_type
+  - course_user_group_id
+  datalake_table_name: course_groups_coursecohort_raw
+- name: course_groups_coursecohortssettings
+  fields:
+  - id
+  - is_cohorted
+  - course_id
+  - cohorted_discussions
+  - always_cohort_inline_discussions
+  datalake_table_name: course_groups_coursecohortssettings_raw
+- name: course_groups_courseusergroup
+  fields:
+  - id
+  - name
+  - course_id
+  - group_type
+  datalake_table_name: course_groups_courseusergroup_raw
+- name: course_groups_courseusergroup_users
+  fields:
+  - id
+  - courseusergroup_id
+  - user_id
+  datalake_table_name: course_groups_courseusergroup_users_raw
+- name: course_groups_courseusergrouppartitiongroup
+  fields:
+  - id
+  - partition_id
+  - group_id
+  - created_at
+  - updated_at
+  - course_user_group_id
+  datalake_table_name: course_groups_courseusergrouppartitiongroup_raw
+- name: course_groups_unregisteredlearnercohortassignments
+  fields:
+  - id
+  - email
+  - course_id
+  - course_user_group_id
+  datalake_table_name: course_groups_unregisteredlearnercohortassignments_raw
