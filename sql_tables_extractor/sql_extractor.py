@@ -164,8 +164,7 @@ class SqlExtractor:
 
             log.info("Extracting {}".format(table))
 
-            field_list = self.get_fields(table=table)
-            fields = [f.get("name") for f in field_list]
+            fields = self.get_fields(table=table)
 
             filename = "{}.csv".format(table)
 
