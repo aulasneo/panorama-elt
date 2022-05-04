@@ -95,7 +95,7 @@ class SqlExtractor:
             return self.table_fields.get(table)
 
         fields_query = """
-            select COLUMN_NAME
+            select COLUMN_NAME, DATA_TYPE
             from INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_NAME = "{table}"
             AND TABLE_SCHEMA = "{db}"
@@ -108,7 +108,11 @@ class SqlExtractor:
 
         log.debug("Fields in table: {}".format(fields))
 
-        return list(f[0] for f in fields)
+        fields_list = []
+        for field in fields:
+            fields_list.append({"name": field[0], "type": field[1]})
+
+        return fields_list
 
     def get_all_fields(self):
         """
@@ -160,7 +164,9 @@ class SqlExtractor:
 
             log.info("Extracting {}".format(table))
 
-            fields = self.get_fields(table=table)
+            field_list = self.get_fields(table=table)
+            fields = [f.get("name") for f in field_list]
+
             filename = "{}.csv".format(table)
 
             partitions = self.field_partitions.get(table)

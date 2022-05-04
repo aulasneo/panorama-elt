@@ -84,7 +84,7 @@ def _upload_sql_tables(force):
             }
         fields = table_setting.get('fields')
         if fields:
-            table_fields[table_setting.get('name')] = fields
+            table_fields[table_setting.get('name')] = [f.get("name") for f in fields]
 
     sql_extractor = SqlExtractor(
         datalake=datalake,
@@ -167,12 +167,13 @@ def _create_datalake_tables():
         else:
             partition_fields = None
 
-        fields = table_setting.get('fields')
+        fields_and_types = table_setting.get('fields')
 
-        if fields:
+        if fields_and_types:
+            fields = [f.get("name") for f in fields_and_types]
             datalake.create_datalake_csv_table(
                 table=table_setting.get('name'),
-                fields=table_setting.get('fields'),
+                fields=fields,
                 field_partitions=partition_fields,
                 datalake_table=table_setting.get('datalake_table_name')
             )
@@ -216,6 +217,9 @@ def _create_course_structures_datalake_table():
         'library',
         'component'
     ]
+
+    fields_and_types = [{"name": f, "type": "varchar"} for f in fields]
+
     datalake.create_datalake_csv_table(
         table='course_structures',
         fields=fields,
@@ -251,7 +255,7 @@ def set_tables(table_list_: str):
 
 @cli.command(help='Creates views based on the tables defined')
 @click.option('--table-name', '-t', required=True)
-@click.option('--view-name', '-v', required=True)
+@click.option('--view-name', '-v')
 def create_table_view(table_name, view_name):
     for table_setting in settings.get('tables'):
         if table_setting.get('name') == table_name:
@@ -262,6 +266,10 @@ def create_table_view(table_name, view_name):
                     datalake_table_name = datalake_table_names.get(table_name)
                 else:
                     datalake_table_name = table_name
+
+                if not view_name:
+                    view_name = '{base_prefix}_table_{table_name}'.format(
+                        base_prefix=settings.get('base_prefix'), table_name=table_name)
 
                 datalake.create_table_view(datalake_table_name=datalake_table_name, view_name=view_name,
                                            fields=fields)

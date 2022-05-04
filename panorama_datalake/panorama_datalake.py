@@ -297,15 +297,43 @@ class PanoramaDatalake:
 
     def create_table_view(self, datalake_table_name: str, view_name: str, fields: list):
 
-        fields_definition = ','.join(['"{}"'.format(f) for f in fields])
+        fields_definition = []
+        for field in fields:
+            field_type = field.get('type').upper()
+
+            # Numeric types
+            if field_type in ['INT', 'TINYINT', 'SMALLINT', 'MEDIUMINT', 'BIGINT']:
+                fields_definition.append('TRY_CAST("{field}" AS BIGINT) "{field}"'.format(field=field.get('name')))
+            elif field_type in ['FLOAT', 'DOUBLE', 'DECIMAL']:
+                fields_definition.append('TRY_CAST("{field}" AS DOUBLE) "{field}"'.format(field=field.get('name')))
+
+            # Datetime types
+            elif field_type == 'DATETIME':
+                fields_definition.append('TRY("date_parse"("{field}", \'%Y-%m-%d %H:%i:%s.%f\')) "{field}"'.format(
+                    field=field.get('name')))
+            elif field_type == 'DATE':
+                fields_definition.append('TRY("date_parse"("{field}", \'%Y-%m-%d\')) "{field}"'.format(
+                    field=field.get('name')))
+            elif field_type == 'TIMESTAMP':
+                fields_definition.append('TRY("date_parse"("{field}", \'%Y%m%d%H%i%s\')) "{field}"'.format(
+                    field=field.get('name')))
+            elif field_type == 'TIME':
+                fields_definition.append('TRY("date_parse"("{field}", \'%H:%i:%s\')) "{field}"'.format(
+                    field=field.get('name')))
+            elif field_type == 'YEAR':
+                fields_definition.append('TRY("date_parse"("{field}", \'%Y\')) "{field}"'.format(
+                    field=field.get('name')))
+
+            # String types
+            else:
+                fields_definition.append('NULLIF("{field}", \'NULL\') "{field}"'.format(field=field.get('name')))
 
         query = """CREATE OR REPLACE VIEW "{view_name}" AS
         SELECT {fields_definition} 
         FROM "{database}"."{table_name}"
         """.format(view_name=view_name,
-                   fields_definition=fields_definition,
+                   fields_definition=','.join(fields_definition),
                    database=self.datalake_db,
                    table_name=datalake_table_name
                    )
         self.query_athena(query)
-
