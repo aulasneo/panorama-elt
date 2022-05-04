@@ -1,5 +1,5 @@
-# panorama-extract-and-load
-Tools to extract data and load to the datalake for Panorama analytics.
+# panorama-elt
+Tools to extract data load to the datalake and transform into a source of truth for Panorama analytics.
 
 ## Introduction
 
@@ -29,7 +29,7 @@ and to S3 that hosts the datalake.
 
 1. Clone the repo
 ```shell
-git clone https://github.com/aulasneo/panorama-extract-load
+git clone https://github.com/aulasneo/panorama-elt
 ```
 2. Install
 ```shell
@@ -142,7 +142,7 @@ _Note_: the course structures table is not partitioned.
 To run the script once an hour, add a line similar to the following one to the crontab:
 
 ```shell
-0 * * * * cd panorama-extract-load && venv/bin/python panorama.py openedx-upload-all >> panorama.log
+0 * * * * cd panorama-elt && venv/bin/python panorama.py openedx-upload-all >> panorama.log
 ```
 
 ## Running in non-Open edX environments
