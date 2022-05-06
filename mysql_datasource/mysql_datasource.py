@@ -51,7 +51,7 @@ def save_rows(filename: str, fields: list, rows: iter) -> None:
         write.writerows(rows_list)
 
 
-class SqlExtractor:
+class MySQLDatasource:
 
     def __init__(
             self,
@@ -114,18 +114,6 @@ class SqlExtractor:
 
         return fields_list
 
-    def get_all_fields(self):
-        """
-        Queries all the tables and returns a dict of fields to update the settings
-        :return: dict in the form { table_name: [ field ... ], ...}
-        """
-
-        table_fields = {}
-        for table in self.tables:
-            table_fields[table] = self.get_fields(table, force_query=True)
-
-        return table_fields
-
     def get_rows(self, table: str, field_list: list = None,
                  where: str = None, distinct: bool = False) -> iter:
         """
@@ -153,14 +141,18 @@ class SqlExtractor:
 
         return rows
 
-    def extract_mysql_tables(self, force: bool = False):
+    def extract_and_load(self, tables: str = None, force: bool = False):
         """
         Extracts mysql tables and sends them to the datalake
 
+        :param tables: (optional) list of tables to extract and load
         :param force: Forces a full update of all the partitions
         :return:
         """
         for table in self.tables:
+
+            if tables and table not in tables.split(','):
+                continue
 
             log.info("Extracting {}".format(table))
 
@@ -228,7 +220,7 @@ class SqlExtractor:
 
             else:
 
-                # Process tables without partitions (except for the lms)
+                # Process tables without field partitions
                 rows = self.get_rows(table=table)
                 save_rows(filename=filename, fields=fields, rows=rows)
 

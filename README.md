@@ -61,9 +61,9 @@ See the _first run_ section bellow to complete the datalake setup.
 ## Configuration
 
 By default, the settings file is `panorama_settings.yaml`. You can override this 
-by setting the `PANORAMA_SETTINGS_FILE` environment variable.
+setting by using the `--settings` option.
 
-Edit the settings file and update the credentials information.
+Edit the settings file and update the credentials information of the datasources.
 For Open edX usage, you will have to set the following variables:
 
 #### MySQL configuration
@@ -72,7 +72,7 @@ For Open edX usage, you will have to set the following variables:
 - mysql_host
 - mysql_database
 
-#### MongoDB configuration
+#### Course structures (MongoDB) configuration
 - mongodb_host
 - mongodb_username
 - mongodb_password
@@ -90,34 +90,39 @@ For Open edX usage, you will have to set the following variables:
 
 #### Identify the LMS 
 
-- In the _base_partitions_ section, edit the _value_ corresponding to the _lms_ key with the url of the LMS
+- In the _datalake.base_partitions_ section, edit the _value_ corresponding to the _lms_ key with the url of the LMS
   (e.g.: lms.example.com)
 
 ## Running the scripts
 ***Before running any command, please see the next section to do the first run***
 
-The scripts must be run from the virtual environment to run. 
-So you can do in two ways (from the installation directory):
-#### Activating the virtualenv first
-```shell
-source venv/bin/activate
-python panorama.py <commands> [OPTIONS]
-```
-#### Running without activating the virtualenv
-```shell
-venv/bin/activate/python panorama.py <commands> [OPTIONS]
-```
+The scripts must be run from the virtual environment to run.
+By default, running `panorama.py` from the command line will use the python interpreter
+in the virtual environment installed `venv/bin/python`
 
 ## First run
+
+### Create raw tables and views in the datalake catalog
 
 Before running the commands that upload the data to the datalake, you should run the following command
 to create the tables in the datalake. Failure to do that will cause errors when the upload routines tries
 to update partitions in nonexistent tables.
 
 ```shell
-venv/bin/python panorama.py create-datalake-tables
+panorama.py create-datalake-tables --all
+```
+By default, these tables are named `<base prefix>_raw_<table name>`
+
+Then create the table views. Table views has exactly the same fields as the underlying raw table, 
+but with numeric and date fields converted. Also strings of value _'NULL'_ are replaced with _null_ values.
+
+```shell
+panorama.py create-datalake-views --all
 ```
 
+By default, these tables are named `<base prefix>_table_<table name>`
+
+### Initial data upload
 If there are tables with incremental updates enabled, you will have to make an initial run
 to upload all partitions, even those that didn't change lately.
 If the tables are large, this can consume lots of CPU resources and take a long time to complete.
@@ -128,11 +133,7 @@ _Note_: You can start doing incremental updates, and do the first run later.
 To run a full update, use the `--force` option:
 
 ```shell
-venv/bin/python panorama.py openedx-upload-all --force
-```
-or (just for MySQL tables):
-```shell
-venv/bin/python panorama.py upload-sql-tables --force
+panorama.py extract-and-load --all --force
 ```
 
 _Note_: the course structures table is not partitioned.
@@ -142,7 +143,7 @@ _Note_: the course structures table is not partitioned.
 To run the script once an hour, add a line similar to the following one to the crontab:
 
 ```shell
-0 * * * * cd panorama-elt && venv/bin/python panorama.py openedx-upload-all >> panorama.log
+0 * * * * cd panorama-elt && venv/bin/python panorama.py extract-and-load --all >> panorama.log
 ```
 
 ## Running in non-Open edX environments
@@ -157,8 +158,8 @@ However, the MySQL script is suitable for any other installation using MySQL.
 To configure Panorama EL for other MySQL installation follow these steps:
 -Configure the mysql connection settings
 - Set the `base_prefix` variable to a word that identifies your system (e.g.: wordpress, erp, forms, etc.)
-- Run `python panorama.py set-tables -t <table list>`, including a comma-separated list of the tables to extract. Do not leave spaces between the tables
-- Run `python panorama.py set-tables-fields` to retrieve each table fields from the database
+- Run `panorama.py set-tables -t <table list>`, including a comma-separated list of the tables to extract. Do not leave spaces between the tables
+- Run `panorama.py set-tables-fields {--all|--datasource=<datasource name>|--table=<table name>}` to retrieve each table fields from the database
 - Optionally, set each table's datalake table name and/or table partitions
 
 ## Datalake directory structure
@@ -173,9 +174,9 @@ s3://<bucket>/[<base prefix>/]<table name>/[<base partitions>/][field partitions
 ```
 Where:
 - bucket: is the bucket name, configured in the `panorama_raw_data_bucket` setting
-- base prefix: (optional) is one or more subdirectories to hold tables of a same kind of system. E.g.: openedx. 
+- base prefix: (optional) subdirectory to hold tables of a same kind of system. E.g.: openedx. 
 It can receive files from multiple sources, as long as the table names are the same and share a field structure 
-- table name: base location of the datalake table. All csv files inside this directory must have exactly the same column structure
+- table name: base location of the datalake table. All text files inside this directory must have exactly the same column structure
 - base partitions: partitions common to a same installation, in Hive format. 
 These are not based on fields in the data sources, but will appear as fileds in the datalake.
 For multiple Open edX installations, the default is to use 'lms' as field name and the LMS_HOST as the value, which is the LMS url.
@@ -192,13 +193,14 @@ To partition a table by a field, add a _partitions_ section to the table's eleme
 and list all the fields to partition under the _partition_fields_ key, as in the example:
 
 ```yaml
-- name: courseware_studentmodule
-  datalake_table_name: courseware_studentmodule_raw
-  partitions:
-    partition_fields:
-    - course_id
-  fields:
-    ...
+tables:
+  - name: courseware_studentmodule
+    datalake_table_name: courseware_studentmodule_raw
+    partitions:
+      partition_fields:
+      - course_id
+    fields:
+      ...
 ```
 
 The fields specified must be a field in the datasource table.
@@ -219,15 +221,16 @@ double to the query period. E.g., if you are querying the tables hourly, set a 2
 
 E.g.:
 ```yaml
-- name: courseware_studentmodule
-  datalake_table_name: courseware_studentmodule_raw
-  partitions:
-    interval: 2 hour
-    partition_fields:
-    - course_id
-    timestamp_field: modified
-  fields:
-    ...
+tables:
+  - name: courseware_studentmodule
+    datalake_table_name: courseware_studentmodule_raw
+    partitions:
+      interval: 2 hour
+      partition_fields:
+      - course_id
+      timestamp_field: modified
+    fields:
+      ...
 ```
 
 ####How it works?

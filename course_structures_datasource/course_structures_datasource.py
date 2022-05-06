@@ -15,7 +15,7 @@ from panorama_logger.setup_logger import log
 filename = 'course_structures.csv'
 
 
-class CourseStructuresExtractor:
+class CourseStructuresDatasource:
 
     def __init__(
             self,
@@ -38,6 +38,37 @@ class CourseStructuresExtractor:
         log.debug("Connecting to mongo using connection string '{}'".format(connection_string))
         client = MongoClient(connection_string)
         self.mongodb = client[mongodb_database]
+
+    def get_fields(self, table: str, force_query: bool = False) -> list:
+        """
+        Returns a list of fields of the table in the database using an existing mysql cursor
+
+        :param table: table name
+        :param force_query: (optional) if set to True, will query the db even if there is a definition set
+        :return: list[str] of fields
+        """
+
+        fields = [
+            'module_location',
+            'course_id',
+            'organization',
+            'course_code',
+            'course_edition',
+            'parent',
+            'block_type',
+            'block_id',
+            'display_name',
+            'course_name',
+            'chapter',
+            'sequential',
+            'vertical',
+            'library',
+            'component'
+        ]
+
+        fields_and_types = [{"name": f, "type": "varchar"} for f in fields]
+
+        return fields_and_types
 
     def get_structures(self, id_list: dict) -> list:
         """
@@ -220,7 +251,7 @@ class CourseStructuresExtractor:
             if block.get('block_type') not in ['course', 'chapter', 'sequential', 'vertical', 'library_content']:
                 block['component_name'] = block.get('display_name')
 
-    def extract_course_structures(self):
+    def extract_and_load(self):
 
         # Get the active versions of each course
         active_versions = self.get_active_versions()
@@ -244,27 +275,12 @@ class CourseStructuresExtractor:
 
         # Save the blocks as a csv table
         log.debug("Writing to CSV")
-        fields = [
-            'module_location',
-            'course_id',
-            'organization',
-            'course_code',
-            'course_edition',
-            'parent',
-            'block_type',
-            'block_id',
-            'display_name',
-            'course_name',
-            'chapter',
-            'sequential',
-            'vertical',
-            'library',
-            'component'
-        ]
+
+        fields = self.get_fields(table="course_structures")
 
         with open(filename, 'w') as f:
             csv_writer = csv.writer(f)
-            csv_writer.writerow(fields)
+            csv_writer.writerow([f.get('name') for f in fields])
 
             for module_location, block_data in blocks.items():
                 row = [
@@ -286,7 +302,7 @@ class CourseStructuresExtractor:
                 ]
                 csv_writer.writerow(row)
 
-        self.datalake.upload_table_from_file(filename=filename, table='course_structures')
+        self.datalake.upload_table_from_file(filename=filename, table='course_structures', update_partitions=True)
 
         os.remove(filename)
 

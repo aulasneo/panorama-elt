@@ -73,6 +73,7 @@ class PanoramaDatalake:
             return
 
         crt = str(uuid4())
+        log.debug("Executing {}".format(query))
         try:
             execution = self.athena.start_query_execution(
                 QueryString=query,
@@ -123,7 +124,7 @@ class PanoramaDatalake:
         :param table: Original name of the table. Present in the s3 key
         :param field_partitions: (optional) field partitions if any
         :param datalake_table_name: (optional) datalake table name. If omitted, will look for the configuration setting.
-            If there is none, the original table name will be used.
+            If there is none, <base_prefix>_raw_<table> will be used.
         :return:
         """
         # Update partitions in the datalake
@@ -148,11 +149,9 @@ class PanoramaDatalake:
 
         # Use Athena to load the partitions
         if not datalake_table_name:
-            if table not in self.datalake_table_names:
-                log.warning("No table settings found for {}. Using defaults.".format(table))
-                datalake_table_name = table
-            else:
-                datalake_table_name = self.datalake_table_names.get(table)
+            datalake_table_name = "{base_prefix}_raw_{table}".format(base_prefix=self.base_prefix, table=table)
+            log.warning("No table settings found for {}. Using default datalake name {}.".format(
+                table, datalake_table_name))
 
         query = "ALTER TABLE {} ADD IF NOT EXISTS PARTITION ({}) LOCATION '{}'".format(
             datalake_table_name,
@@ -201,27 +200,27 @@ class PanoramaDatalake:
         prefix_list.append(filename)
 
         key = "/".join(prefix_list)
-        log.debug("Base prefix: {}".format(prefix_list))
+        log.debug("File key: {}".format(key))
 
         self.s3_client.upload_file(filename, self.panorama_raw_data_bucket, key)
 
         if update_partitions and (self.base_partitions or field_partitions):
             self.update_partitions(table=table, field_partitions=field_partitions)
 
-    def create_datalake_csv_table(self, table: str, fields: list,
-                                  datalake_table: str = None, field_partitions: list = None) -> None:
+    def create_datalake_table(self, table: str, fields: list,
+                              datalake_table: str = None, field_partitions: list = None) -> None:
         """
         Run an Athena query to create the csv table in the database
 
         :param table: original table name, included in the s3 path
-        :param datalake_table: (optional) datalake table name. If omitted, the table name will be used
+        :param datalake_table: (optional) datalake table name. If omitted, <base_prefix>_raw_<table> name will be used
         :param fields: list of fields
         :param field_partitions: list of fields to partition
         :return: None
         """
 
         if not datalake_table:
-            datalake_table = table
+            datalake_table = "{base_prefix}_raw_{table}".format(base_prefix=self.base_prefix, table=table)
 
         # Remove partition fields from the field list
         if field_partitions:
@@ -241,7 +240,8 @@ class PanoramaDatalake:
                 partitions_definitions_list.append('`{partition_field}` string'.format(partition_field=base_partition))
         if field_partitions:
             for field_partitions in field_partitions:
-                partitions_definitions_list.append('`{partition_field}` string'.format(partition_field=field_partitions))
+                partitions_definitions_list.append(
+                    '`{partition_field}` string'.format(partition_field=field_partitions))
         if partitions_definitions_list:
 
             partitions_definitions = ','.join(partitions_definitions_list)
@@ -293,6 +293,30 @@ class PanoramaDatalake:
         )
 
         log.debug("Creating datalake table {} with {}".format(table, query))
+        self.query_athena(query=query)
+
+    def drop_datalake_table(self, datalake_table: str):
+        """
+        Deletes a table from the datalake catalog
+        :param datalake_table: name of the table in the datalake
+        :return:
+        """
+
+        query = """
+            DROP TABLE `{datalake_table}`
+            """.format(datalake_table=datalake_table)
+        self.query_athena(query=query)
+
+    def drop_datalake_view(self, view: str):
+        """
+        Deletes a table from the datalake catalog
+        :param view: name of the table in the datalake
+        :return:
+        """
+
+        query = """
+            DROP VIEW "{view}"
+            """.format(view=view)
         self.query_athena(query=query)
 
     def create_table_view(self, datalake_table_name: str, view_name: str, fields: list):
