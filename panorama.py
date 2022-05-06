@@ -20,7 +20,7 @@ from panorama_logger.setup_logger import log
 from __about__ import __version__
 
 config_file = "panorama_settings.yaml"
-datalake = PanoramaDatalake()
+datalake: PanoramaDatalake
 settings = {}
 datalake_table_names = {}
 
