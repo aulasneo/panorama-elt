@@ -1,0 +1,419 @@
+datalake:
+  type: aws
+  panorama_raw_data_bucket: panorama
+  base_prefix: openedx
+  aws_access_key:
+  aws_secret_access_key:
+  aws_region: us-east-1
+  datalake_database: panorama
+  datalake_workgroup: panorama
+  base_partitions:
+  - name: lms
+    type: varchar
+    value: lms.example.com
+datasources:
+- type: openedx_course_structures
+  name: openedx_course_structures
+  mongodb_host: localhost
+  mongodb_username: ''
+  mongodb_password: ''
+  mongodb_database: edxapp
+  tables:
+  - name: course_structures
+    fields:
+    - name: module_location
+      type: varchar
+    - name: course_id
+      type: varchar
+    - name: organization
+      type: varchar
+    - name: course_code
+      type: varchar
+    - name: course_edition
+      type: varchar
+    - name: parent
+      type: varchar
+    - name: block_type
+      type: varchar
+    - name: block_id
+      type: varchar
+    - name: display_name
+      type: varchar
+    - name: course_name
+      type: varchar
+    - name: chapter
+      type: varchar
+    - name: sequential
+      type: varchar
+    - name: vertical
+      type: varchar
+    - name: library
+      type: varchar
+    - name: component
+      type: varchar
+- type: mysql
+  name: openedx_mysql
+  mysql_username:
+  mysql_password:
+  mysql_host:
+  mysql_database: edxapp
+  tables:
+  - fields:
+    - type: int
+      name: id
+    - type: varchar
+      name: password
+    - type: datetime
+      name: last_login
+    - type: tinyint
+      name: is_superuser
+    - type: varchar
+      name: username
+    - type: varchar
+      name: first_name
+    - type: varchar
+      name: last_name
+    - type: varchar
+      name: email
+    - type: tinyint
+      name: is_staff
+    - type: tinyint
+      name: is_active
+    - type: datetime
+      name: date_joined
+    name: auth_user
+  - fields:
+    - type: int
+      name: id
+    - type: varchar
+      name: course_id
+    - type: datetime
+      name: created
+    - type: tinyint
+      name: is_active
+    - type: varchar
+      name: mode
+    - type: int
+      name: user_id
+    name: student_courseenrollment
+  - fields:
+    - type: int
+      name: id
+    - type: varchar
+      name: name
+    - type: longtext
+      name: meta
+    - type: varchar
+      name: courseware
+    - type: varchar
+      name: language
+    - type: varchar
+      name: location
+    - type: int
+      name: year_of_birth
+    - type: varchar
+      name: gender
+    - type: varchar
+      name: level_of_education
+    - type: longtext
+      name: mailing_address
+    - type: longtext
+      name: city
+    - type: varchar
+      name: country
+    - type: longtext
+      name: goals
+    - type: tinyint
+      name: allow_certificate
+    - type: varchar
+      name: bio
+    - type: datetime
+      name: profile_image_uploaded_at
+    - type: int
+      name: user_id
+    name: auth_userprofile
+  - fields:
+    - type: int
+      name: id
+    - type: varchar
+      name: org
+    - type: varchar
+      name: course_id
+    - type: varchar
+      name: role
+    - type: int
+      name: user_id
+    name: student_courseaccessrole
+  - fields:
+    - type: datetime
+      name: created
+    - type: datetime
+      name: modified
+    - type: int
+      name: version
+    - type: varchar
+      name: id
+    - type: varchar
+      name: _location
+    - type: longtext
+      name: display_name
+    - type: longtext
+      name: display_number_with_default
+    - type: longtext
+      name: display_org_with_default
+    - type: datetime
+      name: start
+    - type: datetime
+      name: end
+    - type: longtext
+      name: advertised_start
+    - type: longtext
+      name: course_image_url
+    - type: longtext
+      name: social_sharing_url
+    - type: longtext
+      name: end_of_course_survey_url
+    - type: longtext
+      name: certificates_display_behavior
+    - type: tinyint
+      name: certificates_show_before_end
+    - type: tinyint
+      name: cert_html_view_enabled
+    - type: tinyint
+      name: has_any_active_web_certificate
+    - type: longtext
+      name: cert_name_short
+    - type: longtext
+      name: cert_name_long
+    - type: decimal
+      name: lowest_passing_grade
+    - type: double
+      name: days_early_for_beta
+    - type: tinyint
+      name: mobile_available
+    - type: tinyint
+      name: visible_to_staff_only
+    - type: longtext
+      name: _pre_requisite_courses_json
+    - type: datetime
+      name: enrollment_start
+    - type: datetime
+      name: enrollment_end
+    - type: longtext
+      name: enrollment_domain
+    - type: tinyint
+      name: invitation_only
+    - type: int
+      name: max_student_enrollments_allowed
+    - type: datetime
+      name: announcement
+    - type: longtext
+      name: catalog_visibility
+    - type: longtext
+      name: course_video_url
+    - type: longtext
+      name: effort
+    - type: longtext
+      name: short_description
+    - type: longtext
+      name: org
+    - type: tinyint
+      name: self_paced
+    - type: longtext
+      name: marketing_url
+    - type: tinyint
+      name: eligible_for_financial_aid
+    - type: longtext
+      name: language
+    - type: datetime
+      name: certificate_available_date
+    name: course_overviews_courseoverview
+  - fields:
+    - type: int
+      name: id
+    - type: varchar
+      name: module_type
+    - type: varchar
+      name: module_id
+    - type: varchar
+      name: course_id
+    - type: longtext
+      name: state
+    - type: double
+      name: grade
+    - type: double
+      name: max_grade
+    - type: varchar
+      name: done
+    - type: datetime
+      name: created
+    - type: datetime
+      name: modified
+    - type: int
+      name: student_id
+    partitions:
+      interval: 2 hour
+      timestamp_field: modified
+      partition_fields:
+      - course_id
+    name: courseware_studentmodule
+  - fields:
+    - type: datetime
+      name: created
+    - type: datetime
+      name: modified
+    - type: bigint
+      name: id
+    - type: int
+      name: user_id
+    - type: varchar
+      name: course_id
+    - type: datetime
+      name: course_edited_timestamp
+    - type: varchar
+      name: course_version
+    - type: varchar
+      name: grading_policy_hash
+    - type: double
+      name: percent_grade
+    - type: varchar
+      name: letter_grade
+    - type: datetime
+      name: passed_timestamp
+    name: grades_persistentcoursegrade
+  - fields:
+    - type: int
+      name: id
+    - type: varchar
+      name: enrolled_email
+    - type: datetime
+      name: time_stamp
+    - type: varchar
+      name: state_transition
+    - type: longtext
+      name: reason
+    - type: int
+      name: enrolled_by_id
+    - type: int
+      name: enrollment_id
+    - type: varchar
+      name: role
+    name: student_manualenrollmentaudit
+  - fields:
+    - type: int
+      name: id
+    - type: varchar
+      name: email
+    - type: varchar
+      name: course_id
+    - type: tinyint
+      name: auto_enroll
+    - type: datetime
+      name: created
+    - type: int
+      name: user_id
+    name: student_courseenrollmentallowed
+  - fields:
+    - type: int
+      name: id
+    - type: varchar
+      name: course_id
+    - type: varchar
+      name: verify_uuid
+    - type: varchar
+      name: download_uuid
+    - type: varchar
+      name: download_url
+    - type: varchar
+      name: grade
+    - type: varchar
+      name: key
+    - type: tinyint
+      name: distinction
+    - type: varchar
+      name: status
+    - type: varchar
+      name: mode
+    - type: varchar
+      name: name
+    - type: datetime
+      name: created_date
+    - type: datetime
+      name: modified_date
+    - type: varchar
+      name: error_reason
+    - type: int
+      name: user_id
+    name: certificates_generatedcertificate
+  - fields:
+    - type: int
+      name: id
+    - type: varchar
+      name: course_id
+    - type: int
+      name: course_user_group_id
+    - type: int
+      name: user_id
+    name: course_groups_cohortmembership
+  - fields:
+    - type: int
+      name: id
+    - type: varchar
+      name: assignment_type
+    - type: int
+      name: course_user_group_id
+    name: course_groups_coursecohort
+  - fields:
+    - type: int
+      name: id
+    - type: tinyint
+      name: is_cohorted
+    - type: varchar
+      name: course_id
+    - type: longtext
+      name: cohorted_discussions
+    - type: tinyint
+      name: always_cohort_inline_discussions
+    name: course_groups_coursecohortssettings
+  - fields:
+    - type: int
+      name: id
+    - type: varchar
+      name: name
+    - type: varchar
+      name: course_id
+    - type: varchar
+      name: group_type
+    name: course_groups_courseusergroup
+  - fields:
+    - type: int
+      name: id
+    - type: int
+      name: courseusergroup_id
+    - type: int
+      name: user_id
+    name: course_groups_courseusergroup_users
+  - fields:
+    - type: int
+      name: id
+    - type: int
+      name: partition_id
+    - type: int
+      name: group_id
+    - type: datetime
+      name: created_at
+    - type: datetime
+      name: updated_at
+    - type: int
+      name: course_user_group_id
+    name: course_groups_courseusergrouppartitiongroup
+  - fields:
+    - type: int
+      name: id
+    - type: varchar
+      name: email
+    - type: varchar
+      name: course_id
+    - type: int
+      name: course_user_group_id
+    name: course_groups_unregisteredlearnercohortassignments

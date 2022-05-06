@@ -8,7 +8,6 @@ import os
 import csv
 
 import pymysql
-from typing import List
 
 from panorama_datalake.panorama_datalake import PanoramaDatalake
 from panorama_logger.setup_logger import log
@@ -51,35 +50,67 @@ def save_rows(filename: str, fields: list, rows: iter) -> None:
         write.writerows(rows_list)
 
 
-class SqlExtractor:
+class MySQLDatasource:
 
     def __init__(
             self,
             datalake: PanoramaDatalake,
-            mysql_database: str,
-            mysql_tables: List[str],
-            mysql_username: str = None,
-            mysql_password: str = None,
-            mysql_host: str = 'localhost',
-            field_partitions: dict = None,
-            table_fields: dict = None,
+            datasource_settings: dict
     ):
 
-        conn = pymysql.connect(
-            host=mysql_host, port=3306,
-            user=mysql_username,
-            passwd=mysql_password,
-            db=mysql_database
-        )
+        mysql_username = datasource_settings.get('mysql_username', 'root')
+        mysql_password = datasource_settings.get('mysql_password')
+        mysql_port = datasource_settings.get('mysql_port', 3306)
+        mysql_host = datasource_settings.get('mysql_host', '127.0.0.1')
+        mysql_database = datasource_settings.get('mysql_database', 'edxapp')
+
+        try:
+            conn = pymysql.connect(
+                host=mysql_host,
+                port=mysql_port,
+                user=mysql_username,
+                passwd=mysql_password,
+                db=mysql_database
+            )
+        except pymysql.err.OperationalError as e:
+            log.error(e)
+            exit(1)
 
         self.cur = conn.cursor()
-        self.tables = mysql_tables
 
-        self.table_fields = table_fields
-        self.field_partitions = field_partitions
+        # This dicts defines which tables have partitions and static fields configurations (if present)
+        # The interval is in MYSQL format
+        self.field_partitions = {}
+        self.table_fields = {}
+        for table_setting in datasource_settings.get('tables'):
+            partitions = table_setting.get('partitions')
+            if partitions:
+                self.field_partitions[table_setting.get('name')] = {
+                    'partition_fields': partitions.get('partition_fields'),
+                    'interval': partitions.get('interval'),
+                    'timestamp_field': partitions.get('timestamp_field'),
+                }
+            fields = table_setting.get('fields')
+            if fields:
+                self.table_fields[table_setting.get('name')] = [f.get("name") for f in fields]
 
         self.datalake = datalake
         self.db = mysql_database
+
+    def test_connections(self) -> dict:
+        """
+        Performs connections test
+        :return: dict with test results
+        """
+        query = "SHOW DATABASES"
+        self.cur.execute(query)
+        r = self.cur.fetchall()
+
+        if self.db in [x[0] for x in r]:
+            results = {'MySQL': 'OK'}
+        else:
+            results = {'MySQL': 'DB not found'}
+        return results
 
     def get_fields(self, table: str, force_query: bool = False) -> list:
         """
@@ -114,18 +145,6 @@ class SqlExtractor:
 
         return fields_list
 
-    def get_all_fields(self):
-        """
-        Queries all the tables and returns a dict of fields to update the settings
-        :return: dict in the form { table_name: [ field ... ], ...}
-        """
-
-        table_fields = {}
-        for table in self.tables:
-            table_fields[table] = self.get_fields(table, force_query=True)
-
-        return table_fields
-
     def get_rows(self, table: str, field_list: list = None,
                  where: str = None, distinct: bool = False) -> iter:
         """
@@ -153,14 +172,18 @@ class SqlExtractor:
 
         return rows
 
-    def extract_mysql_tables(self, force: bool = False):
+    def extract_and_load(self, selected_tables: str = None, force: bool = False):
         """
         Extracts mysql tables and sends them to the datalake
 
+        :param selected_tables: (optional) list of tables to extract and load
         :param force: Forces a full update of all the partitions
         :return:
         """
-        for table in self.tables:
+        for table in self.table_fields.keys():
+
+            if selected_tables and table not in selected_tables.split(','):
+                continue
 
             log.info("Extracting {}".format(table))
 
@@ -228,7 +251,7 @@ class SqlExtractor:
 
             else:
 
-                # Process tables without partitions (except for the lms)
+                # Process tables without field partitions
                 rows = self.get_rows(table=table)
                 save_rows(filename=filename, fields=fields, rows=rows)
 

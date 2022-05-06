@@ -7,7 +7,7 @@ import csv
 import os
 
 from pymongo import MongoClient
-from pymongo.errors import OperationFailure
+import pymongo.errors
 
 from panorama_datalake.panorama_datalake import PanoramaDatalake
 from panorama_logger.setup_logger import log
@@ -15,29 +15,86 @@ from panorama_logger.setup_logger import log
 filename = 'course_structures.csv'
 
 
-class CourseStructuresExtractor:
+class CourseStructuresDatasource:
 
     def __init__(
             self,
             datalake: PanoramaDatalake,
-            mongodb_database: str,
-            mongodb_host: str = 'localhost',
-            mongodb_username: str = None,
-            mongodb_password: str = None,
+            datasource_settings: dict,
     ):
 
         self.datalake = datalake
+        mongodb_username = datasource_settings.get('mongodb_username')
+        mongodb_password = datasource_settings.get('mongodb_password')
+        mongodb_host = datasource_settings.get('mongodb_host', '127.0.0.1')
+        self.mongodb_database = datasource_settings.get('mongodb_database', 'edxapp')
 
         if mongodb_username:
             connection_string = "mongodb://{}:{}@{}/{}".format(mongodb_username, mongodb_password, mongodb_host,
-                                                               mongodb_database)
+                                                               self.mongodb_database)
         else:
-            connection_string = "mongodb://{}/{}".format(mongodb_host, mongodb_database)
+            connection_string = "mongodb://{}/{}".format(mongodb_host, self.mongodb_database)
 
         # Create a connection using MongoClient. You can import MongoClient or use pymongo.MongoClient
         log.debug("Connecting to mongo using connection string '{}'".format(connection_string))
-        client = MongoClient(connection_string)
-        self.mongodb = client[mongodb_database]
+
+        try:
+            self.client = MongoClient(connection_string)
+            self.mongodb = self.client[self.mongodb_database]
+        except pymongo.errors.ConfigurationError as e:
+            log.error(e)
+            exit(1)
+
+    def test_connections(self) -> dict:
+        """
+        Performs connections test
+        :return: dict with test results
+        """
+
+        try:
+            modulestore = self.mongodb.get_collection('modulestore')
+            if modulestore is not None:
+                results = {'MongoDB': 'OK'}
+            else:
+                results = {'MongoDB': 'Modulestore collection not found in db {}'.format(self.mongodb_database)}
+        except pymongo.errors.ServerSelectionTimeoutError as e:
+            results = {'MongoDB': e.args[0]}
+        except pymongo.errors.ConfigurationError as e:
+            results = {'MongoDB': e}
+        except pymongo.errors.OperationFailure as e:
+            results = {'MongoDB': e}
+        return results
+
+    def get_fields(self, table: str, force_query: bool = False) -> list:
+        """
+        Returns a list of fields of the table in the database using an existing mysql cursor
+
+        :param table: table name
+        :param force_query: (optional) if set to True, will query the db even if there is a definition set
+        :return: list[str] of fields
+        """
+
+        fields = [
+            'module_location',
+            'course_id',
+            'organization',
+            'course_code',
+            'course_edition',
+            'parent',
+            'block_type',
+            'block_id',
+            'display_name',
+            'course_name',
+            'chapter',
+            'sequential',
+            'vertical',
+            'library',
+            'component'
+        ]
+
+        fields_and_types = [{"name": f, "type": "varchar"} for f in fields]
+
+        return fields_and_types
 
     def get_structures(self, id_list: dict) -> list:
         """
@@ -83,7 +140,7 @@ class CourseStructuresExtractor:
                     }
                 else:
                     log.error("No published_branch information found in record {}".format(record))
-        except OperationFailure as e:
+        except pymongo.errors.OperationFailure as e:
             log.error("Error accessing MongoDB: {}".format(e))
             return None
 
@@ -220,7 +277,7 @@ class CourseStructuresExtractor:
             if block.get('block_type') not in ['course', 'chapter', 'sequential', 'vertical', 'library_content']:
                 block['component_name'] = block.get('display_name')
 
-    def extract_course_structures(self):
+    def extract_and_load(self):
 
         # Get the active versions of each course
         active_versions = self.get_active_versions()
@@ -244,27 +301,12 @@ class CourseStructuresExtractor:
 
         # Save the blocks as a csv table
         log.debug("Writing to CSV")
-        fields = [
-            'module_location',
-            'course_id',
-            'organization',
-            'course_code',
-            'course_edition',
-            'parent',
-            'block_type',
-            'block_id',
-            'display_name',
-            'course_name',
-            'chapter',
-            'sequential',
-            'vertical',
-            'library',
-            'component'
-        ]
+
+        fields = self.get_fields(table="course_structures")
 
         with open(filename, 'w') as f:
             csv_writer = csv.writer(f)
-            csv_writer.writerow(fields)
+            csv_writer.writerow([f.get('name') for f in fields])
 
             for module_location, block_data in blocks.items():
                 row = [
@@ -286,7 +328,7 @@ class CourseStructuresExtractor:
                 ]
                 csv_writer.writerow(row)
 
-        self.datalake.upload_table_from_file(filename=filename, table='course_structures')
+        self.datalake.upload_table_from_file(filename=filename, table='course_structures', update_partitions=True)
 
         os.remove(filename)
 
