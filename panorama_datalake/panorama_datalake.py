@@ -56,7 +56,7 @@ class PanoramaDatalake:
             region_name=aws_region
         )
         self.s3_client = session.client('s3')
-        self.athena = session.client('athena')
+        self.athena = session.client('athena', region_name=aws_region)
 
         self.datalake_db = datalake_db
         self.datalake_workgroup = datalake_workgroup
