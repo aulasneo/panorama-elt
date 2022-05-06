@@ -57,8 +57,6 @@ class PanoramaDatalake:
             region_name=aws_region
         )
         self.s3_client = session.client('s3')
-
-        os.environ['AWS_REGION'] = aws_region
         self.athena = session.client('athena', region_name=aws_region)
 
         self.datalake_db = datalake_db
