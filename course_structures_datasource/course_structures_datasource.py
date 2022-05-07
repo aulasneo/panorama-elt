@@ -7,7 +7,7 @@ import csv
 import os
 
 from pymongo import MongoClient
-from pymongo.errors import OperationFailure
+import pymongo.errors
 
 from panorama_datalake.panorama_datalake import PanoramaDatalake
 from panorama_logger.setup_logger import log
@@ -27,18 +27,23 @@ class CourseStructuresDatasource:
         mongodb_username = datasource_settings.get('mongodb_username')
         mongodb_password = datasource_settings.get('mongodb_password')
         mongodb_host = datasource_settings.get('mongodb_host', '127.0.0.1')
-        mongodb_database = datasource_settings.get('mongodb_database', 'edxapp')
+        self.mongodb_database = datasource_settings.get('mongodb_database', 'edxapp')
 
         if mongodb_username:
             connection_string = "mongodb://{}:{}@{}/{}".format(mongodb_username, mongodb_password, mongodb_host,
-                                                               mongodb_database)
+                                                               self.mongodb_database)
         else:
-            connection_string = "mongodb://{}/{}".format(mongodb_host, mongodb_database)
+            connection_string = "mongodb://{}/{}".format(mongodb_host, self.mongodb_database)
 
         # Create a connection using MongoClient. You can import MongoClient or use pymongo.MongoClient
         log.debug("Connecting to mongo using connection string '{}'".format(connection_string))
-        client = MongoClient(connection_string)
-        self.mongodb = client[mongodb_database]
+
+        try:
+            self.client = MongoClient(connection_string)
+            self.mongodb = self.client[self.mongodb_database]
+        except pymongo.errors.ConfigurationError as e:
+            log.error(e)
+            exit(1)
 
     def test_connections(self) -> dict:
         """
@@ -46,10 +51,18 @@ class CourseStructuresDatasource:
         :return: dict with test results
         """
         results = {}
-        n = self.mongodb.modulestore.structures.count_documents({})
-        if n > 0:
-            results = {'MongoDB': 'OK'}
-
+        try:
+            dbs = self.client.list_database_names()
+            if self.mongodb_database in dbs:
+                results = {'MongoDB': 'OK'}
+            else:
+                results = {'MongoDB': 'DB {} not found. Available DBs: {}'.format(self.mongodb_database, dbs)}
+        except pymongo.errors.ServerSelectionTimeoutError as e:
+            results = {'MongoDB': e.args[0]}
+        except pymongo.errors.ConfigurationError as e:
+            results = {'MongoDB': e}
+        except pymongo.errors.OperationFailure as e:
+            results = {'MongoDB': e}
         return results
 
     def get_fields(self, table: str, force_query: bool = False) -> list:
@@ -127,7 +140,7 @@ class CourseStructuresDatasource:
                     }
                 else:
                     log.error("No published_branch information found in record {}".format(record))
-        except OperationFailure as e:
+        except pymongo.errors.OperationFailure as e:
             log.error("Error accessing MongoDB: {}".format(e))
             return None
 

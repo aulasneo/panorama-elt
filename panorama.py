@@ -458,8 +458,9 @@ def test_connections(ctx):
         else:
             click.echo("Datasource type {} not supported".format(datasource_settings.get('type')))
 
-
-    click.echo(results)
+    for r in results:
+        for k, v in r.items():
+            click.echo("{}: {}".format(k, v))
 
 
 if __name__ == '__main__':

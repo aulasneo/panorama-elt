@@ -5,6 +5,7 @@ import urllib.parse
 from uuid import uuid4
 
 import boto3
+import botocore
 from botocore.exceptions import ClientError
 
 from panorama_logger.setup_logger import log
@@ -57,17 +58,34 @@ class PanoramaDatalake:
 
         # Test upload to s3
 
-        result1 = self.s3_client.put_object(Bucket=self.panorama_raw_data_bucket, Key='PanoramaConnectionTest')
-        result2 = self.s3_client.delete_object(Bucket=self.panorama_raw_data_bucket, Key='PanoramaConnectionTest')
-        if result1 and result2:
-            results['S3'] = 'OK'
+        try:
+            result1 = self.s3_client.put_object(Bucket=self.panorama_raw_data_bucket, Key='PanoramaConnectionTest')
+            result2 = self.s3_client.delete_object(Bucket=self.panorama_raw_data_bucket, Key='PanoramaConnectionTest')
+            if result1 and result2:
+                results['S3'] = 'OK'
+
+        except botocore.exceptions.ClientError as e:
+            results['S3'] = e.response.get('Error')
+
 
         # Test Athena
         query = "SHOW DATABASES"
         self.query_athena(query)
         result = self.get_athena_executions()
+
         if 'SUCCEEDED' in result and result.get('SUCCEEDED') == 1:
-            results['Athena'] = 'OK'
+            r = self.athena.get_query_results(QueryExecutionId=self.executions[0]['QueryExecutionId'])
+
+            rows = [row.get('Data') for row in r['ResultSet']['Rows']]
+
+            db_list = [x[0]['VarCharValue'] for x in rows]
+            if self.datalake_db in db_list:
+                results['Athena'] = 'Ok'
+            else:
+                results['Athena'] = "Datalake database {} not found. Available databases: {}".format(
+                    self.datalake_db, db_list)
+        else:
+            results['Athena'] = result
 
         return results
 

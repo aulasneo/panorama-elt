@@ -64,13 +64,17 @@ class MySQLDatasource:
         mysql_host = datasource_settings.get('mysql_host', '127.0.0.1')
         mysql_database = datasource_settings.get('mysql_database', 'edxapp')
 
-        conn = pymysql.connect(
-            host=mysql_host,
-            port=mysql_port,
-            user=mysql_username,
-            passwd=mysql_password,
-            db=mysql_database
-        )
+        try:
+            conn = pymysql.connect(
+                host=mysql_host,
+                port=mysql_port,
+                user=mysql_username,
+                passwd=mysql_password,
+                db=mysql_database
+            )
+        except pymysql.err.OperationalError as e:
+            log.error(e)
+            exit(1)
 
         self.cur = conn.cursor()
 
