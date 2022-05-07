@@ -19,11 +19,6 @@ from panorama_datalake.panorama_datalake import PanoramaDatalake
 from panorama_logger.setup_logger import log
 from __about__ import __version__
 
-# config_file = "panorama_settings.yaml"
-# datalake: PanoramaDatalake
-# settings = {}
-# datalake_table_names = {}
-
 
 def load_settings(config_file: str) -> dict:
     """
@@ -69,52 +64,21 @@ def cli(ctx, debug, file):
 
     datalake_settings = settings.get('datalake')
 
-    # S3 bucket where the tables will be uploaded.
-    panorama_raw_data_bucket = datalake_settings.get('panorama_raw_data_bucket')
-    if not panorama_raw_data_bucket:
-        log.error("panorama_raw_data_bucket must be set")
-        exit(1)
-
-    # Datalake table names may differ from MySQL tables. As a convention, we add '_raw' to the table names
-    datalake_table_names = {}
-    for datasource_setting in settings.get('datasources'):
-        for table in datasource_setting.get('tables'):
-            if 'datalake_table_name' in table:
-                datalake_table_names[table.get('name')] = table.get('datalake_table_name')
-            else:
-                datalake_table_names[table.get('name')] = "{base_prefix}_raw_{table_name}".format(
-                    base_prefix=settings.get('datalake').get('base_prefix'),
-                    table_name=table.get('name'))
-
-    # List of partitions common to all tables. For Open edX, it's set to {'lms': <LMS_HOST>}.
-    base_partitions = {}
-    if 'base_partitions' in datalake_settings:
-        for base_partition in datalake_settings.get('base_partitions'):
-            base_partitions[base_partition.get('key')] = base_partition.get('value')
-
     # Create the datalake object
-    datalake = PanoramaDatalake(
-        aws_access_key=datalake_settings.get('aws_access_key'),
-        aws_secret_access_key=datalake_settings.get('aws_secret_access_key'),
-        aws_region=datalake_settings.get('aws_region', 'us-east-1'),
-        datalake_db=datalake_settings.get('datalake_database'),
-        datalake_workgroup=datalake_settings.get('datalake_workgroup'),
-        base_prefix=datalake_settings.get('base_prefix'),
-        bucket=panorama_raw_data_bucket,
-        base_partitions=base_partitions,
-        datalake_table_names=datalake_table_names,
-    )
+    datalake = PanoramaDatalake(datalake_settings)
 
     ctx.obj['datalake'] = datalake
     ctx.obj['config_file'] = config_file
     ctx.obj['settings'] = settings
-    ctx.obj['datalake_table_names'] = datalake_table_names
 
 
 @cli.command(help='Extracts the data from the datasources and uploads to the datalake')
-@click.option("--all", "-a", "all_", is_flag=True, default=False, help="Extract and load all tables of all datasource")
-@click.option("--datasource", "-d", required=False, default=None, help="Extract and load only for this datasource")
-@click.option("--tables", "-t", required=False, default=None, help="Comma separated list of tables to extract and load")
+@click.option("--all", "-a", "all_", is_flag=True, default=False,
+              help="Extract and load all tables of all datasource")
+@click.option("--datasource", "-d", required=False, default=None,
+              help="Extract and load only for this datasource")
+@click.option("--tables", "-t", required=False, default=None,
+              help="Comma separated list of tables to extract and load")
 @click.option('--force', is_flag=True, help='Force upload all partitions. False by default', default=False)
 @click.pass_context
 def extract_and_load(ctx, all_, datasource, tables, force):
@@ -144,7 +108,7 @@ def _extract_and_load(ctx, datasource=None, selected_tables=None, force=False):
     :return:
     """
     settings = ctx.obj.get('settings')
-    datalake = ctx.obj.get('datalake')
+    datalake = PanoramaDatalake(datalake_settings=settings.get('datalake'))
 
     for ds_settings in settings.get('datasources'):
         datasource_type = ds_settings.get("type")
@@ -153,60 +117,34 @@ def _extract_and_load(ctx, datasource=None, selected_tables=None, force=False):
             continue
 
         if selected_tables:
-            tables = [t.get('name') for t in ds_settings.get('tables') if t.get('name') in selected_tables.split(',')]
+            tables = [t.get('name') for t in ds_settings.get('tables')
+                      if t.get('name') in selected_tables.split(',')]
         else:
             tables = [t.get('name') for t in ds_settings.get('tables')]
 
         if datasource_type == 'mysql':
 
-            # This dicts defines which tables have partitions and static fields configurations (if present)
-            # The interval is in MYSQL format
-            table_partitions = {}
-            table_fields = {}
-            for table_setting in ds_settings.get('tables'):
-                partitions = table_setting.get('partitions')
-                if partitions:
-                    table_partitions[table_setting.get('name')] = {
-                        'partition_fields': partitions.get('partition_fields'),
-                        'interval': partitions.get('interval'),
-                        'timestamp_field': partitions.get('timestamp_field'),
-                    }
-                fields = table_setting.get('fields')
-                if fields:
-                    table_fields[table_setting.get('name')] = [f.get("name") for f in fields]
-
-            mysql_username = ds_settings.get('mysql_username', 'root')
-            mysql_password = ds_settings.get('mysql_password')
-            mysql_host = ds_settings.get('mysql_host', '127.0.0.1')
-            mysql_database = ds_settings.get('mysql_database', 'edxapp')
-
-            mysql_datasource = MySQLDatasource(
-                datalake=datalake,
-                mysql_username=mysql_username,
-                mysql_password=mysql_password,
-                mysql_host=mysql_host,
-                mysql_database=mysql_database,
-                mysql_tables=tables,
-                field_partitions=table_partitions,
-                table_fields=table_fields
-            )
-
-            mysql_datasource.extract_and_load(tables=','.join(tables), force=force)
+            mysql_datasource = MySQLDatasource(datalake=datalake, datasource_settings=ds_settings)
+            mysql_datasource.extract_and_load(selected_tables=','.join(tables), force=force)
 
         elif datasource_type == 'openedx_course_structures':
 
             # Extract course structures from MongoDB
-            course_structures_datasource = get_course_structures_datasource(datalake, ds_settings)
-            course_structures_datasource.extract_and_load()
+            course_structures_ds = CourseStructuresDatasource(datalake=datalake, datasource_settings=ds_settings)
+            course_structures_ds.extract_and_load()
 
         else:
             log.error("Datasource type {} not supported".format(datasource_type))
 
 
-@cli.command(help='Creates datalake tables for all tables defined in the settings file. Table fields must be defined.')
-@click.option("--all", "-a", "all_", is_flag=True, default=False, help="Create all tables of all datasource")
-@click.option("--datasource", "-d", required=False, default=None, help="Create tables only for this datasource")
-@click.option("--tables", "-t", required=False, default=None, help="Comma separated list of tables to create")
+@cli.command(help='Creates datalake tables for all tables defined in the settings file. '
+                  'Table fields must be defined.')
+@click.option("--all", "-a", "all_", is_flag=True, default=False,
+              help="Create all tables of all datasource")
+@click.option("--datasource", "-d", required=False, default=None,
+              help="Create tables only for this datasource")
+@click.option("--tables", "-t", required=False, default=None,
+              help="Comma separated list of tables to create")
 @click.pass_context
 def create_datalake_tables(ctx, all_, datasource, tables):
     """
@@ -234,7 +172,9 @@ def _create_datalake_tables(ctx, datasource=None, tables=None):
     :return:
     """
     settings = ctx.obj.get('settings')
-    datalake = ctx.obj.get('datalake')
+    datalake = PanoramaDatalake(datalake_settings=settings.get('datalake'))
+
+    base_prefix = settings.get('datalake').get('base_prefix')
 
     # Create tables for all datasources
     for datasource_settings in settings.get('datasources'):
@@ -254,12 +194,16 @@ def _create_datalake_tables(ctx, datasource=None, tables=None):
 
             if fields_and_types:
                 fields = [f.get("name") for f in fields_and_types]
+
+                datalake_table_name = table_setting.get('datalake_table_name') or "{}_raw_{}".format(
+                    base_prefix, table_setting.get('name'))
+
                 log.info("Creating or updating datalake table for {}".format(table_setting.get('name')))
                 datalake.create_datalake_table(
                     table=table_setting.get('name'),
                     fields=fields,
                     field_partitions=partition_fields,
-                    datalake_table=table_setting.get('datalake_table_name')
+                    datalake_table=datalake_table_name
                 )
 
             else:
@@ -269,9 +213,12 @@ def _create_datalake_tables(ctx, datasource=None, tables=None):
 
 
 @cli.command(help='Deletes datalake tables')
-@click.option("--all", "-a", "all_", is_flag=True, default=False, help="Deletes all tables of all datasource")
-@click.option("--datasource", "-d", required=False, default=None, help="Deletes tables only for this datasource")
-@click.option("--tables", "-t", required=False, default=None, help="Comma separated list of tables to delete")
+@click.option("--all", "-a", "all_", is_flag=True, default=False,
+              help="Deletes all tables of all datasource")
+@click.option("--datasource", "-d", required=False, default=None,
+              help="Deletes tables only for this datasource")
+@click.option("--tables", "-t", required=False, default=None,
+              help="Comma separated list of tables to delete")
 @click.pass_context
 def drop_datalake_tables(ctx, all_, datasource, tables):
     """
@@ -299,7 +246,7 @@ def _drop_datalake_tables(ctx, datasource=None, tables=None):
     :return:
     """
     settings = ctx.obj.get('settings')
-    datalake = ctx.obj.get('datalake')
+    datalake = PanoramaDatalake(datalake_settings=settings.get('datalake'))
 
     # Create tables for all datasources
     base_prefix = settings.get('datalake').get('base_prefix')
@@ -310,15 +257,16 @@ def _drop_datalake_tables(ctx, datasource=None, tables=None):
             if tables and table_setting.get('name') not in tables.split(','):
                 continue
 
-            datalake_table = table_setting.get('datalake_table') or "{}_raw_{}".format(
+            datalake_table_name = table_setting.get('datalake_table_name') or "{}_raw_{}".format(
                 base_prefix, table_setting.get('name'))
-            datalake_view = table_setting.get('datalake_table_view') or "{}_table_{}".format(
+            datalake_view_name = table_setting.get('datalake_table_view') or "{}_table_{}".format(
                 base_prefix, table_setting.get('name'))
 
-            log.info("Dropping {}".format(datalake_table))
+            log.info("Dropping {}".format(datalake_table_name))
+            datalake.drop_datalake_table(datalake_table=datalake_table_name)
 
-            datalake.drop_datalake_table(datalake_table=datalake_table)
-            datalake.drop_datalake_view(view=datalake_view)
+            log.info("Dropping {}".format(datalake_view_name))
+            datalake.drop_datalake_view(view=datalake_view_name)
 
     datalake.get_athena_executions()
 
@@ -350,9 +298,12 @@ def set_tables(ctx, table_list_: str, datasource: str) -> None:
 
 
 @cli.command(help='Creates views based on the tables defined. Tables must be created first.')
-@click.option("--all", "-a", "all_", is_flag=True, default=False, help="Creates all table views of all datasource")
-@click.option("--datasource", "-d", required=False, default=None, help="Creates table views only for this datasource")
-@click.option("--tables", "-t", required=False, default=None, help="Comma separated list of tables views to create")
+@click.option("--all", "-a", "all_", is_flag=True, default=False,
+              help="Creates all table views of all datasource")
+@click.option("--datasource", "-d", required=False, default=None,
+              help="Creates table views only for this datasource")
+@click.option("--tables", "-t", required=False, default=None,
+              help="Comma separated list of tables views to create")
 @click.pass_context
 def create_table_views(ctx, all_, datasource, tables):
     """
@@ -376,8 +327,7 @@ def create_table_views(ctx, all_, datasource, tables):
 
 def _create_table_view(ctx, datasource=None, tables=None):
     settings = ctx.obj.get('settings')
-    datalake = ctx.obj.get('datalake')
-    datalake_table_names = ctx.obj.get('datalake_table_names')
+    datalake = PanoramaDatalake(datalake_settings=settings.get('datalake'))
 
     base_prefix = settings.get('datalake').get('base_prefix')
     for datasource_settings in settings.get('datasources'):
@@ -393,18 +343,16 @@ def _create_table_view(ctx, datasource=None, tables=None):
             log.debug("Creating table view for table {} in datasource {}".format(
                 table_name, datasource_settings.get('name')))
 
-            view_name = table_setting.get('datalake_table_view')
-
             fields = table_setting.get('fields')
             if fields:
-                datalake_table_name = datalake_table_names.get(table_name)
+                datalake_table_name = table_setting.get('datalake_table_name') or "{}_raw_{}".format(
+                    base_prefix, table_setting.get('name'))
+                datalake_view_name = table_setting.get('datalake_table_view') or "{}_table_{}".format(
+                    base_prefix, table_setting.get('name'))
 
-                if not view_name:
-                    view_name = '{base_prefix}_table_{table_name}'.format(
-                        base_prefix=base_prefix, table_name=table_name)
+                log.info("Creating table view {}".format(datalake_view_name))
 
-                log.info("Creating table view {}".format(view_name))
-                datalake.create_table_view(datalake_table_name=datalake_table_name, view_name=view_name,
+                datalake.create_table_view(datalake_table_name=datalake_table_name, view_name=datalake_view_name,
                                            fields=fields)
             else:
                 log.warning("No fields defined for table {}".format(table_name))
@@ -412,27 +360,14 @@ def _create_table_view(ctx, datasource=None, tables=None):
     datalake.get_athena_executions()
 
 
-def get_course_structures_datasource(datalake: PanoramaDatalake, ds_settings: dict):
-    mongodb_username = ds_settings.get('mongodb_username')
-    mongodb_password = ds_settings.get('mongodb_password')
-    mongodb_host = ds_settings.get('mongodb_host', '127.0.0.1')
-    mongodb_database = ds_settings.get('mongodb_database', 'edxapp')
-
-    course_structures_datasource = CourseStructuresDatasource(
-        datalake=datalake,
-        mongodb_username=mongodb_username,
-        mongodb_password=mongodb_password,
-        mongodb_host=mongodb_host,
-        mongodb_database=mongodb_database,
-    )
-
-    return course_structures_datasource
-
-
-@cli.command(help='Queries the SQL tables and updates the tables section of the settings file. Use with care.')
-@click.option("--all", "-a", "all_", is_flag=True, default=False, help="Sets all table fields of all datasource")
-@click.option("--datasource", "-d", required=False, default=None, help="Sets table fields only for this datasource")
-@click.option("--tables", "-t", required=False, default=None, help="Comma separated list of tables to set fields")
+@cli.command(help='Queries the SQL tables and updates the tables section of the settings file. '
+                  'Use with care.')
+@click.option("--all", "-a", "all_", is_flag=True, default=False,
+              help="Sets all table fields of all datasource")
+@click.option("--datasource", "-d", required=False, default=None,
+              help="Sets table fields only for this datasource")
+@click.option("--tables", "-t", required=False, default=None,
+              help="Comma separated list of tables to set fields")
 @click.pass_context
 def set_tables_fields(ctx, all_, datasource, tables):
     """
@@ -462,7 +397,7 @@ def _set_tables_fields(ctx, datasource=None, tables=None):
     :return:
     """
     settings = ctx.obj.get('settings')
-    datalake = ctx.obj.get('datalake')
+    datalake = PanoramaDatalake(datalake_settings=settings.get('datalake'))
     config_file = ctx.obj.get('config_file')
 
     for ds_settings in settings.get('datasources'):
@@ -481,27 +416,13 @@ def _set_tables_fields(ctx, datasource=None, tables=None):
 
             if ds_settings.get('type') == 'mysql':
 
-                mysql_username = ds_settings.get('mysql_username', 'root')
-                mysql_password = ds_settings.get('mysql_password')
-                mysql_host = ds_settings.get('mysql_host', '127.0.0.1')
-                mysql_database = ds_settings.get('mysql_database', 'edxapp')
-
-                mysql_datasource = MySQLDatasource(
-                    datalake=datalake,
-                    mysql_username=mysql_username,
-                    mysql_password=mysql_password,
-                    mysql_host=mysql_host,
-                    mysql_database=mysql_database,
-                    mysql_tables=tables,
-                )
-
+                mysql_datasource = MySQLDatasource(datalake=datalake, datasource_settings=ds_settings)
                 table_fields = mysql_datasource.get_fields(table=table_name, force_query=True)
 
             elif ds_settings.get('type') == 'openedx_course_structures':
 
-                course_structures_datasource = get_course_structures_datasource(datalake, ds_settings)
-
-                table_fields = course_structures_datasource.get_fields(table=table_name)
+                course_structures_ds = CourseStructuresDatasource(datalake=datalake, datasource_settings=ds_settings)
+                table_fields = course_structures_ds.get_fields(table=table_name)
 
             else:
                 log.error("Unknown dataset type {}".format(ds_settings.get('type')))
@@ -512,6 +433,33 @@ def _set_tables_fields(ctx, datasource=None, tables=None):
     save_settings(config_file=config_file, settings=settings)
 
     click.echo("{} updated".format(config_file))
+
+
+@cli.command(help="Test all connections")
+@click.pass_context
+def test_connections(ctx):
+    settings = ctx.obj.get('settings')
+    datalake_settings = settings.get('datalake')
+
+    results = []
+
+    click.echo("Testing datalake...")
+    datalake = PanoramaDatalake(datalake_settings=datalake_settings)
+    results.append(datalake.test_connections())
+
+    for datasource_settings in settings.get('datasources'):
+        click.echo("Testing {}...".format(datasource_settings.get('name')))
+        if datasource_settings.get('type') == 'openedx_course_structures':
+            openedx_course_structures = CourseStructuresDatasource(datalake, datasource_settings)
+            results.append(openedx_course_structures.test_connections())
+        elif datasource_settings.get('type') == 'mysql':
+            mysql_datasource = MySQLDatasource(datalake, datasource_settings)
+            results.append(mysql_datasource.test_connections())
+        else:
+            click.echo("Datasource type {} not supported".format(datasource_settings.get('type')))
+
+
+    click.echo(results)
 
 
 if __name__ == '__main__':

@@ -20,13 +20,14 @@ class CourseStructuresDatasource:
     def __init__(
             self,
             datalake: PanoramaDatalake,
-            mongodb_database: str,
-            mongodb_host: str = 'localhost',
-            mongodb_username: str = None,
-            mongodb_password: str = None,
+            datasource_settings: dict,
     ):
 
         self.datalake = datalake
+        mongodb_username = datasource_settings.get('mongodb_username')
+        mongodb_password = datasource_settings.get('mongodb_password')
+        mongodb_host = datasource_settings.get('mongodb_host', '127.0.0.1')
+        mongodb_database = datasource_settings.get('mongodb_database', 'edxapp')
 
         if mongodb_username:
             connection_string = "mongodb://{}:{}@{}/{}".format(mongodb_username, mongodb_password, mongodb_host,
@@ -38,6 +39,18 @@ class CourseStructuresDatasource:
         log.debug("Connecting to mongo using connection string '{}'".format(connection_string))
         client = MongoClient(connection_string)
         self.mongodb = client[mongodb_database]
+
+    def test_connections(self) -> dict:
+        """
+        Performs connections test
+        :return: dict with test results
+        """
+        results = {}
+        n = self.mongodb.modulestore.structures.count_documents({})
+        if n > 0:
+            results = {'MongoDB': 'OK'}
+
+        return results
 
     def get_fields(self, table: str, force_query: bool = False) -> list:
         """

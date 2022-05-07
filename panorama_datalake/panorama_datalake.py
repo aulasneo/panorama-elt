@@ -1,7 +1,6 @@
 """
 Utility class to manage aws datalake for Panorama analytics
 """
-import os
 import urllib.parse
 from uuid import uuid4
 
@@ -13,54 +12,64 @@ from panorama_logger.setup_logger import log
 
 class PanoramaDatalake:
 
-    def __init__(self,
-                 aws_access_key: str = None,
-                 aws_secret_access_key: str = None,
-                 aws_region: str = None,
-                 datalake_db: str = None,
-                 datalake_workgroup: str = None,
-                 base_prefix: str = None,
-                 bucket: str = None,
-                 base_partitions: dict = None,
-                 datalake_table_names: dict = None,
-                 ):
+    def __init__(self, datalake_settings: dict):
         """
         Connection to Panorama AWS datalake
 
-        :param aws_access_key: (optional) aws credentials. If unset, will try to use a default profile or assume a role
-        :param aws_secret_access_key:
-        :param aws_region: (optional)
-        :param datalake_db: Datalake database name
-        :param datalake_workgroup: Athena workgroup
-        :param base_prefix: Prefix prepended to the S3 path
-        :param bucket: S3 bucket
-        :param base_partitions: dict with fixed partitions in the form { <field>: <value>, ...}
-        :param datalake_table_names: Dict with the name of the datalake table for each table, in the form
-            { <table name>: <datalake table name>, ...}
-            If no datalake name is specified, the same table name will be used.
-
-
+        :param datalake_settings: dict with datalake settings
         """
 
-        self.base_partitions = base_partitions
-        self.base_prefix = base_prefix
-        self.panorama_raw_data_bucket = bucket
-        self.executions = []
-        self.datalake_workgroup = None
-        self.datalake_db = None
+        # S3 bucket where the tables will be uploaded.
+        self.panorama_raw_data_bucket = datalake_settings.get('panorama_raw_data_bucket')
+        if not self.panorama_raw_data_bucket:
+            log.error("panorama_raw_data_bucket must be set")
+            exit(1)
 
-        self.datalake_table_names = datalake_table_names
+        # List of partitions common to all tables. For Open edX, it's set to {'lms': <LMS_HOST>}.
+        self.base_partitions = {}
+        if 'base_partitions' in datalake_settings:
+            for base_partition in datalake_settings.get('base_partitions'):
+                self.base_partitions[base_partition.get('key')] = base_partition.get('value')
+
+        # Base prefix (initial folder) for all datalake files
+        self.base_prefix = datalake_settings.get('base_prefix')
+
+        # List of athena executions to track
+        self.executions = []
 
         session = boto3.Session(
-            aws_access_key_id=aws_access_key,
-            aws_secret_access_key=aws_secret_access_key,
-            region_name=aws_region
+            aws_access_key_id=datalake_settings.get('aws_access_key'),
+            aws_secret_access_key=datalake_settings.get('aws_secret_access_key'),
+            region_name=datalake_settings.get('aws_region', 'us-east-1')
         )
         self.s3_client = session.client('s3')
-        self.athena = session.client('athena', region_name=aws_region)
+        self.athena = session.client('athena', region_name=datalake_settings.get('aws_region', 'us-east-1'))
 
-        self.datalake_db = datalake_db
-        self.datalake_workgroup = datalake_workgroup
+        self.datalake_db = datalake_settings.get('datalake_database')
+        self.datalake_workgroup = datalake_settings.get('datalake_workgroup')
+
+    def test_connections(self) -> dict:
+        """
+        Performs connections test
+        :return: dict with test results
+        """
+        results = {}
+
+        # Test upload to s3
+
+        result1 = self.s3_client.put_object(Bucket=self.panorama_raw_data_bucket, Key='PanoramaConnectionTest')
+        result2 = self.s3_client.delete_object(Bucket=self.panorama_raw_data_bucket, Key='PanoramaConnectionTest')
+        if result1 and result2:
+            results['S3'] = 'OK'
+
+        # Test Athena
+        query = "SHOW DATABASES"
+        self.query_athena(query)
+        result = self.get_athena_executions()
+        if 'SUCCEEDED' in result and result.get('SUCCEEDED') == 1:
+            results['Athena'] = 'OK'
+
+        return results
 
     def query_athena(self, query: str) -> None:
         """
@@ -116,7 +125,9 @@ class PanoramaDatalake:
                 else:
                     results[result] += 1
 
-            log.info("Summary of athena executions: {}".format(results))
+            log.debug("Summary of athena executions: {}".format(results))
+
+        return results
 
     def update_partitions(self, table, field_partitions: iter = None, datalake_table_name: str = None):
         """
@@ -151,9 +162,10 @@ class PanoramaDatalake:
         # Use Athena to load the partitions
         if not datalake_table_name:
             datalake_table_name = "{base_prefix}_raw_{table}".format(base_prefix=self.base_prefix, table=table)
-            log.warning("No table settings found for {}. Using default datalake name {}.".format(
+            log.debug("No table settings found for {}. Using default datalake name {}.".format(
                 table, datalake_table_name))
 
+        log.info("Updating partitions of {}".format(datalake_table_name))
         query = "ALTER TABLE {} ADD IF NOT EXISTS PARTITION ({}) LOCATION '{}'".format(
             datalake_table_name,
             partitions_clause,
@@ -201,8 +213,8 @@ class PanoramaDatalake:
         prefix_list.append(filename)
 
         key = "/".join(prefix_list)
-        log.debug("File key: {}".format(key))
 
+        log.info("Uploading to {}".format(key))
         self.s3_client.upload_file(filename, self.panorama_raw_data_bucket, key)
 
         if update_partitions and (self.base_partitions or field_partitions):
