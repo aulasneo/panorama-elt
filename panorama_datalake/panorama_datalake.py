@@ -65,14 +65,15 @@ class PanoramaDatalake:
         # Test upload to s3
 
         try:
+            log.debug("Putting object PanoramaConnectionTest in bucket {}".format(self.panorama_raw_data_bucket))
             result1 = self.s3_client.put_object(Bucket=self.panorama_raw_data_bucket, Key='PanoramaConnectionTest')
+            log.debug("Deletting object PanoramaConnectionTest in bucket {}".format(self.panorama_raw_data_bucket))
             result2 = self.s3_client.delete_object(Bucket=self.panorama_raw_data_bucket, Key='PanoramaConnectionTest')
             if result1 and result2:
                 results['S3'] = 'OK'
 
         except botocore.exceptions.ClientError as e:
             results['S3'] = e.response.get('Error')
-
 
         # Test Athena
         query = "SHOW DATABASES"
