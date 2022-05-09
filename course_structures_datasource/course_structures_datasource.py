@@ -50,13 +50,13 @@ class CourseStructuresDatasource:
         Performs connections test
         :return: dict with test results
         """
-        results = {}
+
         try:
-            dbs = self.client.list_database_names()
-            if self.mongodb_database in dbs:
+            modulestore = self.mongodb.get_collection('modulestore')
+            if modulestore is not None:
                 results = {'MongoDB': 'OK'}
             else:
-                results = {'MongoDB': 'DB {} not found. Available DBs: {}'.format(self.mongodb_database, dbs)}
+                results = {'MongoDB': 'Modulestore collection not found in db {}'.format(self.mongodb_database)}
         except pymongo.errors.ServerSelectionTimeoutError as e:
             results = {'MongoDB': e.args[0]}
         except pymongo.errors.ConfigurationError as e:
