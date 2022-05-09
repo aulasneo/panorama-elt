@@ -39,12 +39,14 @@ class PanoramaDatalake:
         self.executions = []
 
         if datalake_settings.get('aws_access_key'):
+            log.debug("Creating boto3 session with access key {}".format(datalake_settings.get('aws_access_key')))
             session = boto3.Session(
                 aws_access_key_id=datalake_settings.get('aws_access_key'),
                 aws_secret_access_key=datalake_settings.get('aws_secret_access_key'),
                 region_name=datalake_settings.get('aws_region', 'us-east-1')
             )
         else:
+            log.debug("Creating boto3 session without access key")
             session = boto3.Session(region_name=datalake_settings.get('aws_region', 'us-east-1'))
 
         self.s3_client = session.client('s3')
