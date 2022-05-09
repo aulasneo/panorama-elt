@@ -8,7 +8,8 @@ datalake:
   datalake_database: panorama
   datalake_workgroup: panorama
   base_partitions:
-  - key: lms
+  - name: lms
+    type: varchar
     value: lms.example.com
 datasources:
 - type: openedx_course_structures
