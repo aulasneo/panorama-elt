@@ -38,11 +38,15 @@ class PanoramaDatalake:
         # List of athena executions to track
         self.executions = []
 
-        session = boto3.Session(
-            aws_access_key_id=datalake_settings.get('aws_access_key'),
-            aws_secret_access_key=datalake_settings.get('aws_secret_access_key'),
-            region_name=datalake_settings.get('aws_region', 'us-east-1')
-        )
+        if datalake_settings.get('aws_access_key'):
+            session = boto3.Session(
+                aws_access_key_id=datalake_settings.get('aws_access_key'),
+                aws_secret_access_key=datalake_settings.get('aws_secret_access_key'),
+                region_name=datalake_settings.get('aws_region', 'us-east-1')
+            )
+        else:
+            session = boto3.Session(region_name=datalake_settings.get('aws_region', 'us-east-1'))
+
         self.s3_client = session.client('s3')
         self.athena = session.client('athena', region_name=datalake_settings.get('aws_region', 'us-east-1'))
 
