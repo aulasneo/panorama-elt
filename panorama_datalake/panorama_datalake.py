@@ -20,6 +20,8 @@ class PanoramaDatalake:
         :param datalake_settings: dict with datalake settings
         """
 
+        self.datalake_settings = datalake_settings
+
         # S3 bucket where the tables will be uploaded.
         self.panorama_raw_data_bucket = datalake_settings.get('panorama_raw_data_bucket')
         if not self.panorama_raw_data_bucket:
@@ -30,7 +32,7 @@ class PanoramaDatalake:
         self.base_partitions = {}
         if 'base_partitions' in datalake_settings:
             for base_partition in datalake_settings.get('base_partitions'):
-                self.base_partitions[base_partition.get('key')] = base_partition.get('value')
+                self.base_partitions[base_partition.get('name')] = base_partition.get('value')
 
         # Base prefix (initial folder) for all datalake files
         self.base_prefix = datalake_settings.get('base_prefix')
@@ -360,6 +362,10 @@ class PanoramaDatalake:
     def create_table_view(self, datalake_table_name: str, view_name: str, fields: list):
 
         fields_definition = []
+
+        if self.datalake_settings.get('base_partitions'):
+            fields += self.datalake_settings.get('base_partitions')
+
         for field in fields:
             field_type = field.get('type').upper()
 
