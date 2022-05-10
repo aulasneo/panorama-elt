@@ -1,18 +1,20 @@
 """
-Panorama uploads a local csv file
-This datasource doesn't allow field partitions. Only one file at a time.
-
+Panorama Excel datasource
+This datasource doesn't allow field partitions.
+It will create a table for each sheet, using the sheet name. Each sheet must have data in a tabular format
+Do not leave empty rows or columns.
+The first row must have the field names.
 """
-import os
 import csv
+import os
 
-import pymysql
+import openpyxl
 
 from panorama_datalake.panorama_datalake import PanoramaDatalake
 from panorama_logger.setup_logger import log
 
 
-class CSVDatasource:
+class XLSDatasource:
     """
     Settings required:
     - table: only one table, corresponding to the file
@@ -25,8 +27,8 @@ class CSVDatasource:
             datasource_settings: dict
     ):
 
-        table_settings = datasource_settings.get('tables')
         self.table_fields = {}
+        table_settings = datasource_settings.get('tables')
         if table_settings:
             for table_setting in table_settings:
                 fields = table_setting.get('fields')
@@ -44,21 +46,21 @@ class CSVDatasource:
         from pathlib import Path
         path = Path(self.location)
 
-        results = {'CSV': 'OK' if path.is_file() else 'File {} not found'.format(self.location)}
+        results = {'XLS': 'OK' if path.is_file() else 'File {} not found'.format(self.location)}
 
         return results
 
     def get_tables(self) -> list:
         """
-        Returns the base name of the filename as a list, as the only table possible
+        Returns the list of sheet names, as a list of tables
         :return: list of sheet names
         """
-
-        return os.path.basename(os.path.splitext(self.location)[0])
+        workbook = openpyxl.load_workbook(self.location)
+        return workbook.get_sheet_names()
 
     def get_fields(self, table: str, force_query: bool = False) -> list:
         """
-        Returns a list of fields of the table based on the first row of the csv file.
+        Returns a list of fields of the table based on the first row of the specified sheet in the Excel file.
         All types are assumed to be string.
 
         :param table: table name
@@ -70,9 +72,18 @@ class CSVDatasource:
         if self.table_fields and self.table_fields.get(table) and not force_query:
             return self.table_fields.get(table)
 
-        with open(self.location, mode='r') as file:
-            csv_file = csv.reader(file)
-            fields = next(csv_file)
+        workbook = openpyxl.load_workbook(self.location)
+        sheet = workbook.get_sheet_by_name(table)
+        fields = []
+
+        colnum = 1
+        value = sheet.cell(row=1, column=1).value
+        while value:
+            fields.append(value)
+            colnum += 1
+            value = sheet.cell(row=1, column=colnum).value
+
+        workbook.close()
 
         log.debug("Fields in table: {}".format(fields))
 
@@ -91,6 +102,30 @@ class CSVDatasource:
         :return:
         """
 
-        table = list(self.table_fields.keys())[0]
+        workbook = openpyxl.load_workbook(self.location)
+        for table, fields in self.table_fields.items():
+            sheet = workbook.get_sheet_by_name(table)
 
-        self.datalake.upload_table_from_file(filename=self.location, table=table, update_partitions=False)
+            rownum = 2
+            dataset = []
+            while rownum < 1000000:
+                row = []
+                for colnum in range(len(fields)):
+                    row.append(sheet.cell(row=rownum, column=colnum+1).value)
+                rownum += 1
+                if all([v is None for v in row]):
+                    break
+                dataset.append(row)
+
+            # Save the dataset in a csv file
+            filename = "{}.csv".format(table)
+            with open(filename, 'w') as f:
+                write = csv.writer(f, doublequote=False, escapechar='\\')
+                write.writerow(fields)
+                write.writerows(dataset)
+
+            self.datalake.upload_table_from_file(filename=filename, table=table, update_partitions=True)
+
+            os.remove(filename)
+
+        workbook.close()

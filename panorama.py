@@ -19,6 +19,7 @@ from panorama_datalake.panorama_datalake import PanoramaDatalake
 
 from panorama_logger.setup_logger import log
 from __about__ import __version__
+from xls_datasource.xls_datasource import XLSDatasource
 
 
 def load_settings(config_file: str) -> dict:
@@ -114,8 +115,13 @@ def _get_datasource(datalake, ds_settings):
     elif ds_type == 'csv':
         datasource = CSVDatasource(datalake=datalake, datasource_settings=ds_settings)
 
+    elif ds_type == 'xls':
+
+        datasource = XLSDatasource(datalake=datalake, datasource_settings=ds_settings)
+
     else:
-        log.error("Datasource type {} not supported".format(datasource_type))
+        log.error("Datasource type {} not supported".format(ds_type))
+        exit(1)
         return
 
     return datasource
@@ -281,32 +287,6 @@ def _drop_datalake_tables(ctx, datasource=None, tables=None):
     datalake.get_athena_executions()
 
 
-@cli.command(help="Clears all table configurations and sets new tables from the comma-separated list")
-@click.option('-t', '--tables', 'table_list_')
-@click.option('-d', '--datasource', required=True)
-@click.pass_context
-def set_tables(ctx, table_list_: str, datasource: str) -> None:
-    """
-    Deletes the table settings and replaces with an empty dict containing only the table names
-    :param ctx: click context
-    :param table_list_: Comma separated list of tables to create
-    :param datasource: Datasource to operate on
-    :return: None
-    """
-    settings = ctx.obj.get('settings')
-    config_file = ctx.obj.get('config_file')
-
-    new_tables_settings = []
-    for table_name in table_list_.split(','):
-        new_tables_settings.append({'name': table_name})
-
-    settings[datasource] = {'tables': new_tables_settings}
-
-    save_settings(config_file=config_file, settings=settings)
-
-    click.echo("Tables updated".format(config_file))
-
-
 @cli.command(help='Creates views based on the tables defined. Tables must be created first.')
 @click.option("--all", "-a", "all_", is_flag=True, default=False,
               help="Creates all table views of all datasource")
@@ -370,8 +350,71 @@ def _create_table_view(ctx, datasource=None, tables=None):
     datalake.get_athena_executions()
 
 
-@cli.command(help='Queries the SQL tables and updates the tables section of the settings file. '
-                  'Use with care.')
+@cli.command(help="Queries the datasource's tables and updates the tables section of the settings file. "
+                  "Use with care.")
+@click.option("--all", "-a", "all_", is_flag=True, default=False,
+              help="Sets all table fields of all datasource")
+@click.option("--datasource", "-d", required=False, default=None,
+              help="Sets table fields only for this datasource")
+@click.option("--tables", "-t", required=False, default=None,
+              help="Comma separated list of tables to set fields")
+@click.pass_context
+def set_tables(ctx, all_, datasource, tables):
+    """
+    Click command to run _create_datalake_tables
+    :return:
+    """
+    if all_:
+        if tables:
+            click.echo("--all and --table cannot be used together")
+        else:
+            if datasource:
+                _set_tables(ctx, datasource)
+            else:
+                _set_tables(ctx)
+    else:
+        if datasource or tables:
+            _set_tables(ctx, datasource, tables)
+        else:
+            click.echo("Either --all or --datasource or --table must be specified")
+
+
+def _set_tables(ctx, datasource: str=None, tables: str=None) -> None:
+    """
+    Deletes the table settings and replaces with an empty dict containing only the table names
+    returned by the datasource
+    :param ctx: click context
+    :param table_list_: Comma separated list of tables to create
+    :param datasource: Datasource to operate on
+    :return: None
+    """
+    settings = ctx.obj.get('settings')
+    datalake = PanoramaDatalake(datalake_settings=settings.get('datalake'))
+    config_file = ctx.obj.get('config_file')
+
+    for ds_settings in settings.get('datasources'):
+
+        if datasource and datasource != ds_settings.get('name'):
+            continue
+
+        datasource = _get_datasource(datalake, ds_settings)
+        ds_tables = datasource.get_tables()
+
+        if tables:
+            selected_tables = tables.split(',')
+            table_list = [t for t in ds_tables if t in selected_tables]
+        else:
+            table_list = ds_tables
+
+        ds_settings['tables'] = [{'name': t} for t in table_list]
+
+    save_settings(config_file=config_file, settings=settings)
+
+    click.echo("{} updated".format(config_file))
+
+
+@cli.command(help="Queries the datasource's tables and updates the fields of the tables in the settings file. "
+                  "Use with care.")
 @click.option("--all", "-a", "all_", is_flag=True, default=False,
               help="Sets all table fields of all datasource")
 @click.option("--datasource", "-d", required=False, default=None,

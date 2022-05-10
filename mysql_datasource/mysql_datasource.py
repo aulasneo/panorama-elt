@@ -112,6 +112,17 @@ class MySQLDatasource:
             results = {'MySQL': 'DB not found'}
         return results
 
+    def get_tables(self) -> list:
+        """
+        Returns the list of tables available in the database
+        :return: list of sheet names
+        """
+        query = "SHOW TABLES"
+        self.cur.execute(query)
+        r = self.cur.fetchall()
+
+        return [t[0] for t in r]
+
     def get_fields(self, table: str, force_query: bool = False) -> list:
         """
         Returns a list of fields of the table in the database using an existing mysql cursor

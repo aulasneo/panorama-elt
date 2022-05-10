@@ -65,6 +65,13 @@ class CourseStructuresDatasource:
             results = {'MongoDB': e}
         return results
 
+    def get_tables(self) -> list:
+        """
+        Returns the list of tables available in the database
+        :return: list of sheet names
+        """
+        return 'course_structures'
+
     def get_fields(self, table: str, force_query: bool = False) -> list:
         """
         Returns a list of fields of the table in the database using an existing mysql cursor
