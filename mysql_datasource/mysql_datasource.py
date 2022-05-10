@@ -82,17 +82,20 @@ class MySQLDatasource:
         # The interval is in MYSQL format
         self.field_partitions = {}
         self.table_fields = {}
-        for table_setting in datasource_settings.get('tables'):
-            partitions = table_setting.get('partitions')
-            if partitions:
-                self.field_partitions[table_setting.get('name')] = {
-                    'partition_fields': partitions.get('partition_fields'),
-                    'interval': partitions.get('interval'),
-                    'timestamp_field': partitions.get('timestamp_field'),
-                }
-            fields = table_setting.get('fields')
-            if fields:
-                self.table_fields[table_setting.get('name')] = [f.get("name") for f in fields]
+        table_settings = datasource_settings.get('tables')
+
+        if table_settings:
+            for table_setting in table_settings:
+                partitions = table_setting.get('partitions')
+                if partitions:
+                    self.field_partitions[table_setting.get('name')] = {
+                        'partition_fields': partitions.get('partition_fields'),
+                        'interval': partitions.get('interval'),
+                        'timestamp_field': partitions.get('timestamp_field'),
+                    }
+                fields = table_setting.get('fields')
+                if fields:
+                    self.table_fields[table_setting.get('name')] = [f.get("name") for f in fields]
 
         self.datalake = datalake
         self.db = mysql_database
