@@ -1,0 +1,15 @@
+datalake:
+  type: aws
+  panorama_raw_data_bucket: panorama
+  base_prefix: my_app
+  aws_access_key:
+  aws_secret_access_key:
+  aws_region: us-east-1
+  datalake_database: panorama
+  datalake_workgroup: panorama
+datasources:
+- type: csv
+  name: csv_file
+  location: file.csv
+  tables:
+    name: my_table

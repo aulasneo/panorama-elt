@@ -13,6 +13,7 @@ import yaml
 import click
 
 from course_structures_datasource.course_structures_datasource import CourseStructuresDatasource
+from csv_datasource.csv_datasource import CSVDatasource
 from mysql_datasource.mysql_datasource import MySQLDatasource
 from panorama_datalake.panorama_datalake import PanoramaDatalake
 
@@ -101,6 +102,25 @@ def extract_and_load(ctx, all_, datasource, tables, force):
             click.echo("Either --all or --datasource or --table must be specified")
 
 
+def _get_datasource(datalake, ds_settings):
+
+    ds_type = ds_settings.get('type')
+    if ds_type == 'mysql':
+        datasource = MySQLDatasource(datalake=datalake, datasource_settings=ds_settings)
+
+    elif ds_type == 'openedx_course_structures':
+        datasource = CourseStructuresDatasource(datalake=datalake, datasource_settings=ds_settings)
+
+    elif ds_type == 'csv':
+        datasource = CSVDatasource(datalake=datalake, datasource_settings=ds_settings)
+
+    else:
+        log.error("Datasource type {} not supported".format(datasource_type))
+        return
+
+    return datasource
+
+
 def _extract_and_load(ctx, datasource=None, selected_tables=None, force=False):
     """
     Query the datasources defined in the settings and uploads to the datalake
@@ -122,19 +142,9 @@ def _extract_and_load(ctx, datasource=None, selected_tables=None, force=False):
         else:
             tables = [t.get('name') for t in ds_settings.get('tables')]
 
-        if datasource_type == 'mysql':
+        datasource = _get_datasource(datalake, ds_settings)
 
-            mysql_datasource = MySQLDatasource(datalake=datalake, datasource_settings=ds_settings)
-            mysql_datasource.extract_and_load(selected_tables=','.join(tables), force=force)
-
-        elif datasource_type == 'openedx_course_structures':
-
-            # Extract course structures from MongoDB
-            course_structures_ds = CourseStructuresDatasource(datalake=datalake, datasource_settings=ds_settings)
-            course_structures_ds.extract_and_load()
-
-        else:
-            log.error("Datasource type {} not supported".format(datasource_type))
+        datasource.extract_and_load(selected_tables=','.join(tables), force=force)
 
 
 @cli.command(help='Creates datalake tables for all tables defined in the settings file. '
@@ -414,20 +424,9 @@ def _set_tables_fields(ctx, datasource=None, tables=None):
             log.debug("Setting fields for table {} in datasource {}".format(
                 table_name, ds_settings.get('name')))
 
-            if ds_settings.get('type') == 'mysql':
+            datasource = _get_datasource(datalake, ds_settings)
 
-                mysql_datasource = MySQLDatasource(datalake=datalake, datasource_settings=ds_settings)
-                table_fields = mysql_datasource.get_fields(table=table_name, force_query=True)
-
-            elif ds_settings.get('type') == 'openedx_course_structures':
-
-                course_structures_ds = CourseStructuresDatasource(datalake=datalake, datasource_settings=ds_settings)
-                table_fields = course_structures_ds.get_fields(table=table_name)
-
-            else:
-                log.error("Unknown dataset type {}".format(ds_settings.get('type')))
-                continue
-
+            table_fields = datasource.get_fields(table=table_name, force_query=True)
             table_settings['fields'] = table_fields
 
     save_settings(config_file=config_file, settings=settings)
@@ -449,14 +448,9 @@ def test_connections(ctx):
 
     for datasource_settings in settings.get('datasources'):
         click.echo("Testing {}...".format(datasource_settings.get('name')))
-        if datasource_settings.get('type') == 'openedx_course_structures':
-            openedx_course_structures = CourseStructuresDatasource(datalake, datasource_settings)
-            results.append(openedx_course_structures.test_connections())
-        elif datasource_settings.get('type') == 'mysql':
-            mysql_datasource = MySQLDatasource(datalake, datasource_settings)
-            results.append(mysql_datasource.test_connections())
-        else:
-            click.echo("Datasource type {} not supported".format(datasource_settings.get('type')))
+
+        datasource = _get_datasource(datalake, datasource_settings)
+        results.append(datasource.test_connections())
 
     for r in results:
         for k, v in r.items():
