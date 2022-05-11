@@ -392,6 +392,10 @@ class PanoramaDatalake:
                 fields_definition.append('TRY("date_parse"("{field}", \'%Y\')) "{field}"'.format(
                     field=field.get('name')))
 
+            # JSON types are not supported by Hive views
+            elif field_type == 'JSON':
+                fields_definition.append('NULLIF("{field}", \'NULL\') "{field}"'.format(field=field.get('name')))
+
             # String types
             elif field_type in ['CHAR', 'VARCHAR', 'BLOB', 'TEXT', 'TINYBLOB', 'TINYTEXT', 'MEDIUMBLOB', 'MEDIUMTEXT',
                                 'LONGBLOB', 'LONGTEXT', 'ENUM', 'STRING']:
