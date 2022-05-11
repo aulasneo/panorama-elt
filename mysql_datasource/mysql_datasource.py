@@ -72,11 +72,11 @@ class MySQLDatasource:
                 passwd=mysql_password,
                 db=mysql_database
             )
+            self.cur = conn.cursor()
+
         except pymysql.err.OperationalError as e:
             log.error(e)
             exit(1)
-
-        self.cur = conn.cursor()
 
         # This dicts defines which tables have partitions and static fields configurations (if present)
         # The interval is in MYSQL format

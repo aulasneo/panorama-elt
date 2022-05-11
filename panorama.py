@@ -74,35 +74,6 @@ def cli(ctx, debug, file):
     ctx.obj['settings'] = settings
 
 
-@cli.command(help='Extracts the data from the datasources and uploads to the datalake')
-@click.option("--all", "-a", "all_", is_flag=True, default=False,
-              help="Extract and load all tables of all datasource")
-@click.option("--datasource", "-d", required=False, default=None,
-              help="Extract and load only for this datasource")
-@click.option("--tables", "-t", required=False, default=None,
-              help="Comma separated list of tables to extract and load")
-@click.option('--force', is_flag=True, help='Force upload all partitions. False by default', default=False)
-@click.pass_context
-def extract_and_load(ctx, all_, datasource, tables, force):
-    """
-    Click command to run _create_datalake_tables
-    :return:
-    """
-    if all_:
-        if tables:
-            click.echo("--all and --table cannot be used together")
-        else:
-            if datasource:
-                _extract_and_load(ctx, datasource=datasource, force=force)
-            else:
-                _extract_and_load(ctx, force=force)
-    else:
-        if datasource or tables:
-            _extract_and_load(ctx, datasource=datasource, selected_tables=tables, force=force)
-        else:
-            click.echo("Either --all or --datasource or --table must be specified")
-
-
 def _get_datasource(datalake, ds_settings):
 
     ds_type = ds_settings.get('type')
@@ -127,7 +98,36 @@ def _get_datasource(datalake, ds_settings):
     return datasource
 
 
-def _extract_and_load(ctx, datasource=None, selected_tables=None, force=False):
+@cli.command(help='Extracts the data from the datasources and uploads to the datalake')
+@click.option("--all", "-a", "all_", is_flag=True, default=False,
+              help="Extract and load all tables of all datasource")
+@click.option("--datasource", "-d", required=False, default=None,
+              help="Extract and load only for this datasource")
+@click.option("--tables", "-t", required=False, default=None,
+              help="Comma separated list of tables to extract and load")
+@click.option('--force', is_flag=True, help='Force upload all partitions. False by default', default=False)
+@click.pass_context
+def extract_and_load(ctx, all_, datasource, tables, force):
+    """
+    Click command to run _create_datalake_tables
+    :return:
+    """
+    if all_:
+        if tables:
+            click.echo("--all and --table cannot be used together")
+        else:
+            if datasource:
+                _extract_and_load(ctx, selected_datasource=datasource, force=force)
+            else:
+                _extract_and_load(ctx, force=force)
+    else:
+        if datasource or tables:
+            _extract_and_load(ctx, selected_datasource=datasource, selected_tables=tables, force=force)
+        else:
+            click.echo("Either --all or --datasource or --table must be specified")
+
+
+def _extract_and_load(ctx, selected_datasource=None, selected_tables=None, force=False):
     """
     Query the datasources defined in the settings and uploads to the datalake
     :param force: boolean. Force a full dump for tables with incremental updates configured
@@ -137,20 +137,13 @@ def _extract_and_load(ctx, datasource=None, selected_tables=None, force=False):
     datalake = PanoramaDatalake(datalake_settings=settings.get('datalake'))
 
     for ds_settings in settings.get('datasources'):
-        datasource_type = ds_settings.get("type")
 
-        if datasource and ds_settings.get("name") != datasource:
+        if selected_datasource and ds_settings.get("name") != selected_datasource:
             continue
-
-        if selected_tables:
-            tables = [t.get('name') for t in ds_settings.get('tables')
-                      if t.get('name') in selected_tables.split(',')]
-        else:
-            tables = [t.get('name') for t in ds_settings.get('tables')]
 
         datasource = _get_datasource(datalake, ds_settings)
 
-        datasource.extract_and_load(selected_tables=','.join(tables), force=force)
+        datasource.extract_and_load(selected_tables=selected_tables, force=force)
 
 
 @cli.command(help='Creates datalake tables for all tables defined in the settings file. '
@@ -379,12 +372,12 @@ def set_tables(ctx, all_, datasource, tables):
             click.echo("Either --all or --datasource or --table must be specified")
 
 
-def _set_tables(ctx, datasource: str=None, tables: str=None) -> None:
+def _set_tables(ctx, datasource: str = None, tables: str = None) -> None:
     """
     Deletes the table settings and replaces with an empty dict containing only the table names
     returned by the datasource
     :param ctx: click context
-    :param table_list_: Comma separated list of tables to create
+    :param tables: Comma separated list of tables to create
     :param datasource: Datasource to operate on
     :return: None
     """

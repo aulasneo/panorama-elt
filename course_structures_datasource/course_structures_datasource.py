@@ -284,7 +284,10 @@ class CourseStructuresDatasource:
             if block.get('block_type') not in ['course', 'chapter', 'sequential', 'vertical', 'library_content']:
                 block['component_name'] = block.get('display_name')
 
-    def extract_and_load(self):
+    def extract_and_load(self, selected_tables: str = None, force: bool = False):
+
+        if selected_tables and 'course_structures' not in selected_tables:
+            return
 
         # Get the active versions of each course
         active_versions = self.get_active_versions()
