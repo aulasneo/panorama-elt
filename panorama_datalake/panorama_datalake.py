@@ -1,6 +1,7 @@
 """
 Utility class to manage aws datalake for Panorama analytics
 """
+import time
 import urllib.parse
 from uuid import uuid4
 
@@ -155,6 +156,7 @@ class PanoramaDatalake:
                     results[result] = 1
                 else:
                     results[result] += 1
+            time.sleep(1)
 
             log.debug("Summary of athena executions: {}".format(results))
 
