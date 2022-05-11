@@ -393,8 +393,14 @@ class PanoramaDatalake:
                     field=field.get('name')))
 
             # String types
-            else:
+            elif field_type in ['CHAR', 'VARCHAR', 'BLOB', 'TEXT', 'TINYBLOB', 'TINYTEXT', 'MEDIUMBLOB', 'MEDIUMTEXT',
+                                'LONGBLOB', 'LONGTEXT', 'ENUM', 'STRING']:
                 fields_definition.append('NULLIF("{field}", \'NULL\') "{field}"'.format(field=field.get('name')))
+
+            # Other custom types:
+            else:
+                fields_definition.append('TRY_CAST("{field}" AS {field_type}) "{field}"'.format(
+                    field=field.get('name'), field_type=field_type))
 
         query = """CREATE OR REPLACE VIEW "{view_name}" AS
         SELECT {fields_definition} 
