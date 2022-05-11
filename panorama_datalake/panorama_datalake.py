@@ -136,7 +136,6 @@ class PanoramaDatalake:
             return state
 
         except ClientError as e:
-            log.error("boto3 error trying to execute athena query {}".format(query))
             log.error(e)
             return
 
