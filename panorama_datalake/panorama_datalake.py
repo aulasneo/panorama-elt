@@ -130,10 +130,15 @@ class PanoramaDatalake:
     def get_athena_query_execution(self, execution):
 
         execution_id = execution.get('QueryExecutionId')
-        response = self.athena.get_query_execution(QueryExecutionId=execution_id)
-        state = response.get('QueryExecution').get('Status').get('State')
+        try:
+            response = self.athena.get_query_execution(QueryExecutionId=execution_id)
+            state = response.get('QueryExecution').get('Status').get('State')
+            return state
 
-        return state
+        except ClientError as e:
+            log.error("boto3 error trying to execute athena query {}".format(query))
+            log.error(e)
+            return
 
     def get_athena_executions(self, max_iter: int = 20):
         """
