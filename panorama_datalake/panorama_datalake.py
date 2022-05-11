@@ -84,16 +84,20 @@ class PanoramaDatalake:
         result = self.get_athena_executions()
 
         if 'SUCCEEDED' in result and result.get('SUCCEEDED') == 1:
-            r = self.athena.get_query_results(QueryExecutionId=self.executions[0]['QueryExecutionId'])
+            try:
+                r = self.athena.get_query_results(QueryExecutionId=self.executions[0]['QueryExecutionId'])
 
-            rows = [row.get('Data') for row in r['ResultSet']['Rows']]
+                rows = [row.get('Data') for row in r['ResultSet']['Rows']]
 
-            db_list = [x[0]['VarCharValue'] for x in rows]
-            if self.datalake_db in db_list:
-                results['Athena'] = 'Ok'
-            else:
-                results['Athena'] = "Datalake database {} not found. Available databases: {}".format(
-                    self.datalake_db, db_list)
+                db_list = [x[0]['VarCharValue'] for x in rows]
+                if self.datalake_db in db_list:
+                    results['Athena'] = 'Ok'
+                else:
+                    results['Athena'] = "Datalake database {} not found. Available databases: {}".format(
+                        self.datalake_db, db_list)
+            except ClientError as e:
+                log.error(e)
+                exit(1)
         else:
             results['Athena'] = result
 
