@@ -383,7 +383,7 @@ class PanoramaDatalake:
                 fields_definition.append('TRY("date_parse"("{field}", \'%Y-%m-%d\')) "{field}"'.format(
                     field=field.get('name')))
             elif field_type == 'TIMESTAMP':
-                fields_definition.append('TRY("date_parse"("{field}", \'%Y%m%d%H%i%s\')) "{field}"'.format(
+                fields_definition.append('TRY("date_parse"("{field}", \'%Y-%m-%d %H:%i:%s\')) "{field}"'.format(
                     field=field.get('name')))
             elif field_type == 'TIME':
                 fields_definition.append('TRY("date_parse"("{field}", \'%H:%i:%s\')) "{field}"'.format(
