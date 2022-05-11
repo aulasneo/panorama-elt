@@ -137,7 +137,7 @@ class PanoramaDatalake:
 
         except ClientError as e:
             log.error(e)
-            return
+            exit(1)
 
     def get_athena_executions(self, max_iter: int = 20):
         """
