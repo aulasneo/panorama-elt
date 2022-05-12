@@ -218,7 +218,7 @@ def _create_datalake_tables(ctx, datasource=None, tables=None):
             else:
                 log.warning("No fields defined for table {}. Skipping table creation".format(table_setting.get('name')))
 
-    datalake.get_athena_executions()
+    click.echo(datalake.get_athena_executions())
 
 
 @cli.command(help='Deletes datalake tables')
@@ -277,7 +277,7 @@ def _drop_datalake_tables(ctx, datasource=None, tables=None):
             log.info("Dropping {}".format(datalake_view_name))
             datalake.drop_datalake_view(view=datalake_view_name)
 
-    datalake.get_athena_executions()
+    click.echo(datalake.get_athena_executions())
 
 
 @cli.command(help='Creates views based on the tables defined. Tables must be created first.')
@@ -340,7 +340,7 @@ def _create_table_view(ctx, datasource=None, tables=None):
             else:
                 log.warning("No fields defined for table {}".format(table_name))
 
-    datalake.get_athena_executions()
+    click.echo(datalake.get_athena_executions())
 
 
 @cli.command(help="Queries the datasource's tables and updates the tables section of the settings file. "
