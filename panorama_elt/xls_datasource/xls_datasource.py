@@ -10,8 +10,8 @@ import os
 
 import openpyxl
 
-from panorama_datalake.panorama_datalake import PanoramaDatalake
-from panorama_logger.setup_logger import log
+from panorama_elt.panorama_datalake.panorama_datalake import PanoramaDatalake
+from panorama_elt.panorama_logger.setup_logger import log
 
 
 class XLSDatasource:

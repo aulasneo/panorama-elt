@@ -9,7 +9,7 @@ import boto3
 import botocore
 from botocore.exceptions import ClientError
 
-from panorama_logger.setup_logger import log
+from panorama_elt.panorama_logger.setup_logger import log
 
 
 class PanoramaDatalake:

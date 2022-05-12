@@ -9,8 +9,8 @@ import os
 from pymongo import MongoClient
 import pymongo.errors
 
-from panorama_datalake.panorama_datalake import PanoramaDatalake
-from panorama_logger.setup_logger import log
+from panorama_elt.panorama_datalake.panorama_datalake import PanoramaDatalake
+from panorama_elt.panorama_logger.setup_logger import log
 
 filename = 'course_structures.csv'
 

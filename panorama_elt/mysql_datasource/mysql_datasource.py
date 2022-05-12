@@ -9,8 +9,8 @@ import csv
 
 import pymysql
 
-from panorama_datalake.panorama_datalake import PanoramaDatalake
-from panorama_logger.setup_logger import log
+from panorama_elt.panorama_datalake.panorama_datalake import PanoramaDatalake
+from panorama_elt.panorama_logger.setup_logger import log
 
 
 def save_rows(filename: str, fields: list, rows: iter) -> None:

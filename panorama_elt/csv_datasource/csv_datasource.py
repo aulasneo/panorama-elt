@@ -6,10 +6,8 @@ This datasource doesn't allow field partitions. Only one file at a time.
 import os
 import csv
 
-import pymysql
-
-from panorama_datalake.panorama_datalake import PanoramaDatalake
-from panorama_logger.setup_logger import log
+from panorama_elt.panorama_datalake.panorama_datalake import PanoramaDatalake
+from panorama_elt.panorama_logger.setup_logger import log
 
 
 class CSVDatasource:
