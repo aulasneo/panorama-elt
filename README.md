@@ -49,7 +49,7 @@ The `PanoramaDatalake` class provided is set up to connect to a AWS datalake.
 However, it's methods can be overridden for other datalake technologies.
 
 To set up your AWS datalake, you will need to:
-- create or use an IAM user or role with permissions to access the S3 buckets, KMS if encrypted, Glue and Athena
+- create or use an IAM user or role with permissions to access the S3 buckets, KMS if encrypted, Glue and Athena.
 - create one S3 bucket to store the data and another as the Athena queries results location
   - we recommend to use encrypted buckets, and to have strict access policies to them
 - create the Panorama database in Athena with `CREATE DATABASE panorama`
@@ -57,6 +57,50 @@ To set up your AWS datalake, you will need to:
   - set the 'Query result location' to the bucket created for this workgroup
 
 See the _first run_ section bellow to complete the datalake setup. 
+
+### User permissions to work with AWS datalake
+
+In order to work with a AWS datalake, you will need to create a user (e.g. _panorama-elt_)
+and assign a policy (named e.g. _PanoramaELT_) with at least the following permissions.
+
+Replace **\<region>** and **\<account id>** with proper values. 
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "VisualEditor0",
+            "Effect": "Allow",
+            "Action": [
+                "glue:BatchCreatePartition",
+                "glue:GetDatabase",
+                "athena:StartQueryExecution",
+                "glue:CreateTable",
+                "athena:GetQueryExecution",
+                "athena:GetQueryResults",
+                "glue:GetDatabases",
+                "glue:GetTable"
+            ],
+            "Resource": [
+                "arn:aws:athena:<region>:<account id>:workgroup/panorama",
+                "arn:aws:glue:<region>:<account id>:database/panorama",
+                "arn:aws:glue:<region>:<account id>:catalog",
+                "arn:aws:glue:<region>:<account id>:table/panorama/*"
+            ]
+        },
+        {
+            "Sid": "VisualEditor1",
+            "Effect": "Allow",
+            "Action": "s3:*",
+            "Resource": "*"
+        }
+    ]
+}
+```
+
+If you have encrypted S3 buckets with KMS, you may need to add permissions to get
+the KMS keys.
 
 ## Configuration
 
