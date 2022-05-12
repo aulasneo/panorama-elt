@@ -29,17 +29,19 @@ class CourseStructuresDatasource:
         mongodb_host = datasource_settings.get('mongodb_host', '127.0.0.1')
         self.mongodb_database = datasource_settings.get('mongodb_database', 'edxapp')
 
-        if mongodb_username:
-            connection_string = "mongodb://{}:{}@{}/{}".format(mongodb_username, mongodb_password, mongodb_host,
-                                                               self.mongodb_database)
-        else:
-            connection_string = "mongodb://{}/{}".format(mongodb_host, self.mongodb_database)
-
-        # Create a connection using MongoClient. You can import MongoClient or use pymongo.MongoClient
-        log.debug("Connecting to mongo using connection string '{}'".format(connection_string))
+        # Create a connection using MongoClient. 
+        log.debug("Connecting to mongo. Host: {} username: {} password: {}, db: {}".format(
+            mongodb_host, mongodb_username, mongodb_password, self.mongodb_database))
 
         try:
-            self.client = MongoClient(connection_string)
+            self.client = MongoClient(
+                    host=mongodb_host, 
+                    username=mongodb_username, 
+                    password=mongodb_password, 
+                    authSource=self.mongodb_database, 
+                    readPreference='secondaryPreferred', 
+                    directConnection=True
+                    )
             self.mongodb = self.client[self.mongodb_database]
         except pymongo.errors.ConfigurationError as e:
             log.error(e)
