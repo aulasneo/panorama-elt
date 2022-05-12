@@ -283,6 +283,32 @@ First it will query all distinct values in the fields defined as partition field
 with timestamp in the last interval from the current time.
 Then only the field based partitions detected will be updated. Note that the whole partition will be updated.
 
+## Running inside a docker container
+
+### Building the image
+
+Panorama can be run from inside a docker container. There is a Dockerfile included for that purpose.
+The container must bind mount the `/config` directory to hold the coniguration file.
+
+To build the image, run:
+```shell
+docker build -t aulasneo/panorama-elt:$(python -c "from panorama_elt.__about__ import __version__; print(__version__)") -t aulasneo/panorama-elt:latest .
+```
+
+To bind mount the configuration directory and run the image to get a shell prompt, run:
+
+```shell
+docker run --name panorama -it -v $(pwd)/config:/config  panorama-elt:latest bash
+```
+Then, from inside the container's shell, you can run panorama commands indicating the location
+of the settings file. E.g.:
+
+```shell
+:/# python panorama.py --settings=/config/panorama_openedx_settings.yaml test-connections
+```
+
+Note that the container must have access to the datasources and the datalake to work.
+
 ## License
 
 This software is licenced under Apache 2.0 license. Please see LICENSE for more details.

@@ -19,7 +19,7 @@ from panorama_elt.xls_datasource.xls_datasource import XLSDatasource
 from panorama_elt.panorama_datalake.panorama_datalake import PanoramaDatalake
 
 from panorama_elt.panorama_logger.setup_logger import log
-from __about__ import __version__
+from panorama_elt.__about__ import __version__
 
 
 def load_settings(config_file: str) -> dict:
