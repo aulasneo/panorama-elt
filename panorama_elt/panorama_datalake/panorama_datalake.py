@@ -386,20 +386,8 @@ class PanoramaDatalake:
                 fields_definition.append('TRY_CAST("{field}" AS DOUBLE) "{field}"'.format(field=field.get('name')))
 
             # Datetime types
-            elif field_type == 'DATETIME':
+            elif field_type in ['DATETIME', 'DATE', 'TIMESTAMP', 'TIME', 'YEAR']:
                 fields_definition.append('TRY("date_parse"("{field}", \'%Y-%m-%d %H:%i:%s.%f\')) "{field}"'.format(
-                    field=field.get('name')))
-            elif field_type == 'DATE':
-                fields_definition.append('TRY("date_parse"("{field}", \'%Y-%m-%d\')) "{field}"'.format(
-                    field=field.get('name')))
-            elif field_type == 'TIMESTAMP':
-                fields_definition.append('TRY("date_parse"("{field}", \'%Y-%m-%d %H:%i:%s\')) "{field}"'.format(
-                    field=field.get('name')))
-            elif field_type == 'TIME':
-                fields_definition.append('TRY("date_parse"("{field}", \'%H:%i:%s\')) "{field}"'.format(
-                    field=field.get('name')))
-            elif field_type == 'YEAR':
-                fields_definition.append('TRY("date_parse"("{field}", \'%Y\')) "{field}"'.format(
                     field=field.get('name')))
 
             # JSON types are not supported by Hive views

@@ -4,6 +4,7 @@ Extracts a list of tables from a mysql database as csv files and uploads them to
 Data can be partitioned by a list of base partitions and a set of fields.
 
 """
+import datetime
 import os
 import csv
 
@@ -39,9 +40,11 @@ def save_rows(filename: str, fields: list, rows: iter) -> None:
         fields_list = []
         for field in row:
             if type(field) is str:
-                fields_list.append(field.replace('\\', '\\\\'))
-            else:
-                fields_list.append(field)
+                field = field.replace('\\', '\\\\')
+            elif isinstance(field, datetime.datetime):
+                # When the seconds are zero, the microseconds are not displayed
+                field = field.strftime('%Y-%m-%d %H:%M:%S.') + '%06d' % field.microsecond
+            fields_list.append(field)
         rows_list.append(fields_list)
 
     with open(filename, 'w') as f:
