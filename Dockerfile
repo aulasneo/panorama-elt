@@ -10,3 +10,10 @@ RUN mkdir config
 COPY requirements.txt .
 
 RUN pip install -r requirements.txt
+
+# Install cron
+RUN apt-get update && apt-get install -y cron
+
+RUN touch /etc/cron.d/crontab
+RUN crontab /etc/cron.d/crontab
+RUN cron

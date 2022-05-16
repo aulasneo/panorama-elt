@@ -14,3 +14,5 @@ Fix bug in date parsing
 Fix connection to MongoDB: use direct connection and secondaryPreferred to avoid issues in certain clusters
 Reorganize packages
 Create and document Dockerfile
+## 0.1.5 wip
+Fix a bug in date parsing
