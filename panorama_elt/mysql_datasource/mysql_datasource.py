@@ -151,6 +151,8 @@ class MySQLDatasource:
             table=table,
             db=self.db)
 
+        log.debug("Querying mysql fields: {}".format(fields_query))
+
         self.cur.execute(fields_query)
         fields = self.cur.fetchall()
 
@@ -182,6 +184,8 @@ class MySQLDatasource:
             fields=fields,
             table=table,
             where_clause=where_clause)
+
+        log.debug("Querying mysql rows: {}".format(query))
 
         self.cur.execute(query)
 
