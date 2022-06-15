@@ -273,7 +273,7 @@ class MySQLDatasource:
             else:
 
                 # Process tables without field partitions
-                rows = self.get_rows(table=table)
+                rows = self.get_rows(table=table, field_list=fields)
                 save_rows(filename=filename, fields=fields, rows=rows)
 
                 self.datalake.upload_table_from_file(filename=filename, table=table, update_partitions=True)
