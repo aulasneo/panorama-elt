@@ -176,6 +176,12 @@ class MySQLDatasource:
         :return:
         """
 
+        if not field_list:
+            log.warning("No field list provided for table '{}'. Using '*' to query all mysql fields.".format(table))
+        else:
+            # Quote all field names
+            field_list = ['"{}"'.format(f) for f in field_list]
+
         fields = '*' if not field_list else ','.join(field_list)
         where_clause = 'where {}'.format(where) if where else ''
 
