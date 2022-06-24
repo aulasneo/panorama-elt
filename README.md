@@ -80,7 +80,10 @@ Replace **\<region>** and **\<account id>** with proper values.
                 "athena:GetQueryExecution",
                 "athena:GetQueryResults",
                 "glue:GetDatabases",
-                "glue:GetTable"
+                "glue:GetTable",
+                "glue:DeleteTable",
+                "glue:GetPartitions",
+                "glue:UpdateTable"
             ],
             "Resource": [
                 "arn:aws:athena:<region>:<account id>:workgroup/panorama",
