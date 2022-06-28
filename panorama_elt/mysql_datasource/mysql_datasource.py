@@ -85,10 +85,11 @@ class MySQLDatasource:
         # The interval is in MYSQL format
         self.field_partitions = {}
         self.table_fields = {}
-        table_settings = datasource_settings.get('tables')
+        self.table_fields_settings = {}
+        self.table_settings = datasource_settings.get('tables')
 
-        if table_settings:
-            for table_setting in table_settings:
+        if self.table_settings:
+            for table_setting in self.table_settings:
                 partitions = table_setting.get('partitions')
                 if partitions:
                     self.field_partitions[table_setting.get('name')] = {
@@ -99,6 +100,7 @@ class MySQLDatasource:
                 fields = table_setting.get('fields')
                 if fields:
                     self.table_fields[table_setting.get('name')] = [f.get("name") for f in fields]
+                    self.table_fields_settings[table_setting.get('name')] = [f for f in fields]
 
         self.datalake = datalake
         self.db = mysql_database
@@ -178,16 +180,33 @@ class MySQLDatasource:
 
         if not field_list:
             log.warning("No field list provided for table '{}'. Using '*' to query all mysql fields.".format(table))
+            fields_statement = '*'
         else:
-            # Quote all field names
-            field_list = ['`{}`'.format(f) for f in field_list]
 
-        fields = '*' if not field_list else ','.join(field_list)
+            fields = self.table_fields_settings[table]
+            field_statement_list = []
+            for f in fields:
+                # If a value key is set in the field configuration, set as a constant value for the query
+                if 'value' in f:
+                    if not f.get('value'):
+                        field = "NULL as `{}`".format(f.get('name'))
+                    elif f.get('type') in ['CHAR', 'VARCHAR', 'BLOB', 'TEXT', 'TINYBLOB', 'TINYTEXT', 'ENUM',
+                                           'MEDIUMBLOB', 'MEDIUMTEXT', 'LONGBLOB', 'LONGTEXT', 'STRING']:
+                        field = "'{}' as `{}`".format(f.get('value'), f.get('name'))
+                    else:
+                        field = "{} as `{}`".format(f.get('value'), f.get('name'))
+                else:
+                    field = '`{}`'.format(f.get('name'))
+
+                field_statement_list.append(field)
+
+            fields_statement = ','.join(field_statement_list)
+
         where_clause = 'where {}'.format(where) if where else ''
 
         query = 'select {prefix} {fields} from {table} {where_clause}'.format(
             prefix='distinct' if distinct else '',
-            fields=fields,
+            fields=fields_statement,
             table=table,
             where_clause=where_clause)
 
