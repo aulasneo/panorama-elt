@@ -20,3 +20,6 @@ Fix a bug in date parsing
 Allow "value" key in the fields definition to override the field with a constant value.
 The field will not be queried, but will be filled with the constant value. 
 E.g., can be set to 'null' if a field is missing the the DB but still needed in the datalake.
+
+## 0.1.6
+Fix bug

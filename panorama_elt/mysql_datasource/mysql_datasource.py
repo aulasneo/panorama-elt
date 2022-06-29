@@ -186,17 +186,19 @@ class MySQLDatasource:
             fields = self.table_fields_settings[table]
             field_statement_list = []
             for f in fields:
-                # If a value key is set in the field configuration, set as a constant value for the query
-                if 'value' in f:
-                    if not f.get('value'):
-                        field = "NULL as `{}`".format(f.get('name'))
-                    elif f.get('type') in ['CHAR', 'VARCHAR', 'BLOB', 'TEXT', 'TINYBLOB', 'TINYTEXT', 'ENUM',
-                                           'MEDIUMBLOB', 'MEDIUMTEXT', 'LONGBLOB', 'LONGTEXT', 'STRING']:
-                        field = "'{}' as `{}`".format(f.get('value'), f.get('name'))
+                # Omit fields not in the field list
+                if f.get('name') in field_list:
+                    # If a value key is set in the field configuration, set as a constant value for the query
+                    if 'value' in f:
+                        if not f.get('value'):
+                            field = "NULL as `{}`".format(f.get('name'))
+                        elif f.get('type') in ['CHAR', 'VARCHAR', 'BLOB', 'TEXT', 'TINYBLOB', 'TINYTEXT', 'ENUM',
+                                               'MEDIUMBLOB', 'MEDIUMTEXT', 'LONGBLOB', 'LONGTEXT', 'STRING']:
+                            field = "'{}' as `{}`".format(f.get('value'), f.get('name'))
+                        else:
+                            field = "{} as `{}`".format(f.get('value'), f.get('name'))
                     else:
-                        field = "{} as `{}`".format(f.get('value'), f.get('name'))
-                else:
-                    field = '`{}`'.format(f.get('name'))
+                        field = '`{}`'.format(f.get('name'))
 
                 field_statement_list.append(field)
 
