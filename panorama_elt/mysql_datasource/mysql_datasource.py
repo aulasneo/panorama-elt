@@ -200,7 +200,7 @@ class MySQLDatasource:
                     else:
                         field = '`{}`'.format(f.get('name'))
 
-                field_statement_list.append(field)
+                    field_statement_list.append(field)
 
             fields_statement = ','.join(field_statement_list)
 
