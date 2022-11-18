@@ -19,16 +19,6 @@ datasources:
   mongodb_password: ''
   mongodb_database: edxapp
   tables:
-  - name: student_anonymoususerid
-    fields:
-    - name: id
-      type: int
-    - name: anonymous_user_id
-      type: varchar
-    - name: course_id
-      type: varchar
-    - name: user_id
-      type: int
   - name: course_structures
     fields:
     - name: module_location
@@ -68,6 +58,16 @@ datasources:
   mysql_host:
   mysql_database: edxapp
   tables:
+  - name: student_anonymoususerid
+    fields:
+    - name: id
+      type: int
+    - name: anonymous_user_id
+      type: varchar
+    - name: course_id
+      type: varchar
+    - name: user_id
+      type: int
   - name: site_configuration_siteconfiguration
     fields:
     - name: id
