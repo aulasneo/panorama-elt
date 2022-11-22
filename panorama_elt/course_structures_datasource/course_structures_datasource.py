@@ -6,6 +6,8 @@ versions of each course. The table will be saved as a csv file and uploaded to S
 import csv
 import os
 
+import bson
+import pymysql
 from pymongo import MongoClient
 import pymongo.errors
 
@@ -47,6 +49,34 @@ class CourseStructuresDatasource:
             log.error(e)
             exit(1)
 
+        # With split mongo, the active versions are stored in a mysql table
+        if datasource_settings.get('mysql_host'):
+            log.info("MySQL host defined. Using MySQL to get active versions")
+            self.use_split_mongo_active_versions = True
+            mysql_username = datasource_settings.get('mysql_username', 'root')
+            mysql_password = datasource_settings.get('mysql_password')
+            mysql_port = datasource_settings.get('mysql_port', 3306)
+            mysql_host = datasource_settings.get('mysql_host', '127.0.0.1')
+            mysql_database = datasource_settings.get('mysql_database', 'edxapp')
+
+            try:
+                conn = pymysql.connect(
+                    host=mysql_host,
+                    port=mysql_port,
+                    user=mysql_username,
+                    passwd=mysql_password,
+                    db=mysql_database
+                )
+                self.cur = conn.cursor()
+
+            except pymysql.err.OperationalError as e:
+                log.error(e)
+                exit(1)
+        else:
+            log.info("MySQL host not defined. Using MongoDB to get active versions")
+            self.use_split_mongo_active_versions = False
+
+
     def test_connections(self) -> dict:
         """
         Performs connections test
@@ -72,7 +102,7 @@ class CourseStructuresDatasource:
         Returns the list of tables available in the database
         :return: list of sheet names
         """
-        return 'course_structures'
+        return ['course_structures']
 
     def get_fields(self, table: str, force_query: bool = False) -> list:
         """
@@ -121,11 +151,13 @@ class CourseStructuresDatasource:
 
         return structs
 
-    def get_active_versions(self):
+    def get_active_versions_mongodb(self):
         """
         Returns a dict of courses in the active_versions collection in the form:
             { published_branch_id: { 'org': org, 'course': course, 'run': run }},...
             where published_branch_id is of type 'bson.objectid.ObjectId' as returned by pymongo's find()
+
+            Old version that queries MongoDB
 
         :return: dict of courses.
         """
@@ -152,6 +184,64 @@ class CourseStructuresDatasource:
         except pymongo.errors.OperationFailure as e:
             log.error("Error accessing MongoDB: {}".format(e))
             return None
+
+        log.info("{} active versions found".format(len(active_versions)))
+        return active_versions
+
+    def get_active_versions(self):
+        """
+        Returns a dict of courses in the active_versions collection in the form:
+            { published_branch_id: { 'org': org, 'course': course, 'run': run }},...
+            where published_branch_id is of type 'bson.objectid.ObjectId' as returned by pymongo's find()
+
+                https://github.com/openedx/edx-platform/commit/6c856680994583953906155290f1c9e37530b733
+                Now active versions come from MySQL table split_modulestore_django_splitmodulestorecourseindex, which
+                has the following fields:
+                id
+                objectid
+                course_id
+                org
+                draft_version
+                published_version
+                library_version
+                wiki_slug
+                base_store (currently "mongodb")
+                edited_on (date)
+                last_update (date)
+                edited_by_id (int): user id
+
+                objectid, draft_version and published_version are the string id of the mongodb object.
+
+        :return: dict of courses.
+        """
+
+        field_list = [
+            "published_version",
+            "course_id",
+        ]
+
+        log.debug("Getting active versions from mysql")
+        query = 'select {fields} from {table}'.format(
+            fields=",".join(field_list),
+            table='split_modulestore_django_splitmodulestorecourseindex;',
+        )
+
+        log.debug("Querying mysql rows: {}".format(query))
+
+        self.cur.execute(query)
+        rows = self.cur.fetchall()
+
+        active_versions = dict()
+
+        for record in rows[1:]:
+            published_branch = bson.objectid.ObjectId(record[0])
+            course_id = record[1]
+
+            active_versions[published_branch] = {
+                'org': course_id[10:].split('+')[0],
+                'course': course_id.split('+')[1],
+                'run': course_id.split('+')[2]
+            }
 
         log.info("{} active versions found".format(len(active_versions)))
         return active_versions
@@ -292,7 +382,15 @@ class CourseStructuresDatasource:
             return
 
         # Get the active versions of each course
-        active_versions = self.get_active_versions()
+        # If there is a mysql host configured in the settings, then use split mongo to get the active versions (Nutmeg+)
+        # Otherwise, use the old mongodb
+
+        if self.use_split_mongo_active_versions:
+            log.info("Using split mongo to get active versions")
+            active_versions = self.get_active_versions()
+        else:
+            log.info("Using mongodb to get active versions")
+            active_versions = self.get_active_versions_mongodb()
         if not active_versions:
             log.warning("No active versions found")
             return

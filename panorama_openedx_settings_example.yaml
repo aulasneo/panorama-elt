@@ -18,6 +18,10 @@ datasources:
   mongodb_username: ''
   mongodb_password: ''
   mongodb_database: edxapp
+  mysql_username:
+  mysql_password:
+  mysql_host:
+  mysql_database: edxapp
   tables:
   - name: course_structures
     fields:
