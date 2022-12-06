@@ -1,4 +1,6 @@
 # Change log
+## 0.2.1
+Fix small bug
 ## 0.2
 Use `split_modulestore_django_splitmodulestorecourseindex` table
 to get the list of active versions of the courses, instead of mongodb.

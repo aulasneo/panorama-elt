@@ -302,7 +302,7 @@ class CourseStructuresDatasource:
                 # that will be exported as a table
 
                 log.debug("Creating block {} with name {} and {} children".format(
-                    module_location, display_name, len(children)))
+                    module_location, display_name, len(children) if children else 0))
                 blocks[module_location] = dict(
                     organization=organization,
                     course_code=course_code,
