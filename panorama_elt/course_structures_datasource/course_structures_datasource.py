@@ -234,14 +234,19 @@ class CourseStructuresDatasource:
         active_versions = dict()
 
         for record in rows[1:]:
-            published_branch = bson.objectid.ObjectId(record[0])
-            course_id = record[1]
 
-            active_versions[published_branch] = {
-                'org': course_id[10:].split('+')[0],
-                'course': course_id.split('+')[1],
-                'run': course_id.split('+')[2]
-            }
+            course_id = record[1]
+            if course_id[:6] == 'course':
+                # We only care about courses, not libraries
+                if record[0]:
+                    # make sure that the published version id is not empty
+                    published_branch = bson.objectid.ObjectId(record[0])
+
+                    active_versions[published_branch] = {
+                        'org': course_id[10:].split('+')[0],
+                        'course': course_id.split('+')[1],
+                        'run': course_id.split('+')[2]
+                    }
 
         log.info("{} active versions found".format(len(active_versions)))
         return active_versions
