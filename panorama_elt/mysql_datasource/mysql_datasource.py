@@ -41,6 +41,9 @@ def save_rows(filename: str, fields: list, rows: iter) -> None:
         for field in row:
             if type(field) is str:
                 field = field.replace('\\', '\\\\')
+                # Escape newline and CR characters
+                field = field.replace('\r', '\\r') 
+                field = field.replace('\n', '\\n') 
             elif isinstance(field, datetime.datetime):
                 # When the seconds are zero, the microseconds are not displayed
                 field = field.strftime('%Y-%m-%d %H:%M:%S.') + '%06d' % field.microsecond
