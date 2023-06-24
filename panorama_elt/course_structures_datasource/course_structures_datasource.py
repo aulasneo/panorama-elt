@@ -233,7 +233,7 @@ class CourseStructuresDatasource:
 
         active_versions = dict()
 
-        for record in rows[1:]:
+        for record in rows:
 
             course_id = record[1]
             if course_id[:6] == 'course':

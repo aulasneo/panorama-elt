@@ -1,4 +1,6 @@
 # Change log
+## 0.2.3
+Fix bug that prevented the first course to be considered
 ## 0.2.2
 Fix bug to consider course structure records with empty active version id.
 ## 0.2.1
