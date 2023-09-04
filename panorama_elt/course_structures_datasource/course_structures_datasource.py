@@ -138,20 +138,21 @@ class CourseStructuresDatasource:
 
         return fields_and_types
 
-    def get_structures(self, id_list: dict) -> dict:
+    def get_structures(self, active_versions: dict) -> dict:
         """
         Returns a list of records in the structures collections whose id are keys of id_list
-        :param id_list: dict. The keys of the dict are used to filter the structures by id. The keys must be of type
+        :param active_versions: dict. The keys of the dict are used to filter the structures by id. The keys must be of type
             'bson.objectid.ObjectId', as returned by pymongo's find
         :return: list of structures
         """
-        log.debug("Getting {} blocks".format(len(id_list)))
-        cursor = self.mongodb.modulestore.structures.find({'_id': {'$in': list(id_list.keys())}})
+        published_branches = [active_version['published_branch'] for _, active_version in active_versions.items()]
+        log.debug(published_branches)
+        log.debug("Getting blocks of {} published branches".format(len(published_branches)))
+        cursor = self.mongodb.modulestore.structures.find({'_id': {'$in': published_branches}})
 
         structs = dict()
         for record in cursor:
             structs[record['_id']] = record
-
         return structs
 
     def get_active_versions_mongodb(self):

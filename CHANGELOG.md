@@ -1,4 +1,7 @@
 # Change log
+
+## Unreleased
+Refactor get_structures to fix a bug that impacts courses reruns
 ## 0.2.3
 Fix bug that prevented the first course to be considered
 ## 0.2.2
