@@ -1,6 +1,6 @@
 # Change log
 
-## Unreleased
+## Version 0.2.4 (2023-09-04)
 Refactor get_structures to fix a bug that impacts courses reruns
 ## 0.2.3
 Fix bug that prevented the first course to be considered
