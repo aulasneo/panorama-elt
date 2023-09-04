@@ -59,6 +59,9 @@ class CourseStructuresDatasource:
             mysql_host = datasource_settings.get('mysql_host', '127.0.0.1')
             mysql_database = datasource_settings.get('mysql_database', 'edxapp')
 
+            log.debug(f"Connecting MySQL: host: {mysql_host}:{mysql_port}, db: {mysql_database}, "
+                      f"user: {mysql_username} password: {mysql_password}")
+
             try:
                 conn = pymysql.connect(
                     host=mysql_host,
@@ -135,7 +138,7 @@ class CourseStructuresDatasource:
 
         return fields_and_types
 
-    def get_structures(self, id_list: dict) -> list:
+    def get_structures(self, id_list: dict) -> dict:
         """
         Returns a list of records in the structures collections whose id are keys of id_list
         :param id_list: dict. The keys of the dict are used to filter the structures by id. The keys must be of type
@@ -145,9 +148,9 @@ class CourseStructuresDatasource:
         log.debug("Getting {} blocks".format(len(id_list)))
         cursor = self.mongodb.modulestore.structures.find({'_id': {'$in': list(id_list.keys())}})
 
-        structs = []
+        structs = dict()
         for record in cursor:
-            structs.append(record)
+            structs[record['_id']] = record
 
         return structs
 
@@ -172,9 +175,11 @@ class CourseStructuresDatasource:
         try:
             for record in cursor:
                 published_branch = record.get('versions').get('published-branch')
+                course_id = f"course-v1:{record['org']}+{record['course']}+{record['run']}"
 
                 if published_branch:
-                    active_versions[published_branch] = {
+                    active_versions[course_id] = {
+                        'published_branch': published_branch,
                         'org': record['org'],
                         'course': record['course'],
                         'run': record['run']
@@ -242,7 +247,8 @@ class CourseStructuresDatasource:
                     # make sure that the published version id is not empty
                     published_branch = bson.objectid.ObjectId(record[0])
 
-                    active_versions[published_branch] = {
+                    active_versions[course_id] = {
+                        'published_branch': published_branch,
                         'org': course_id[10:].split('+')[0],
                         'course': course_id.split('+')[1],
                         'run': course_id.split('+')[2]
@@ -251,7 +257,7 @@ class CourseStructuresDatasource:
         log.info("{} active versions found".format(len(active_versions)))
         return active_versions
 
-    def get_blocks(self, course_structures: list, active_versions: dict) -> dict:
+    def get_blocks(self, course_structures: dict, active_versions: dict) -> dict:
         """
         Extracts the blocks of a course structure, in the form:
         { block_id: {
@@ -274,16 +280,20 @@ class CourseStructuresDatasource:
 
         # Course structures is a list with one item per course, with the structure of the current active version.
         # There should be one and only one item in active_versions for each one in course_structures
-        for structure in course_structures:
-            course_block_id = structure.get('_id')
-            active_version = active_versions.get(course_block_id)
+        for course_id, active_version in active_versions.items():
+            log.debug(f"Getting blocks of course {course_id}")
+            course_block_id = active_version['published_branch']
+            structure = course_structures.get(course_block_id)
+            log.debug(f"Active branch of course {course_id} is {str(course_block_id)}")
+
+            if not structure:
+                log.error(f"No course structure found for published branch {course_block_id} of course {course_id}")
+                continue
 
             # The active_version dict only has information of the course id. This info is not in the structure element
             organization = active_version.get('org')
             course_code = active_version.get('course')
             course_edition = active_version.get('run')
-
-            course_id = 'course-v1:{}+{}+{}'.format(organization, course_code, course_edition)
 
             # The course structure dict has an element 'blocks' with the internal structure of the course
             for block in structure.get('blocks'):
@@ -404,11 +414,6 @@ class CourseStructuresDatasource:
         # Get the structures of all the active versions
         structures = self.get_structures(active_versions)
         log.debug("Found {} structures".format(len(structures)))
-
-        if len(active_versions) != len(structures):
-            # There should be as many active versions as course structures
-            log.warning(
-                "Found {} active versions but {} course structures".format(len(active_versions), len(structures)))
 
         # Build a dict with one item per block, including courses, chapters, sequentials, verticals and components
         blocks = self.get_blocks(course_structures=structures, active_versions=active_versions)
