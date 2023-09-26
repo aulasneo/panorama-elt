@@ -1,6 +1,6 @@
 # Change log
 
-## Unreleased
+## Version 0.3.0 (2023-09-26)
 Add problem weight to course structures
 
 ## Version 0.2.4 (2023-09-04)
