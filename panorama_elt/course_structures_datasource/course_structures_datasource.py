@@ -5,6 +5,7 @@ versions of each course. The table will be saved as a csv file and uploaded to S
 """
 import csv
 import os
+import re
 
 import bson
 import pymysql
@@ -131,7 +132,8 @@ class CourseStructuresDatasource:
             'sequential',
             'vertical',
             'library',
-            'component'
+            'component',
+            'weight'
         ]
 
         fields_and_types = [{"name": f, "type": "varchar"} for f in fields]
@@ -314,6 +316,44 @@ class CourseStructuresDatasource:
                 display_name = fields.get('display_name')
                 children = fields.get('children')
 
+                # We get the weight of graded problems, which is optional
+                if block_type == 'problem':
+                    weight = fields.get('weight')
+
+                    if not weight:
+                        definition_id = bson.objectid.ObjectId(block.get('definition'))
+                        definition = self.mongodb.modulestore.definitions.find({'_id': {'$eq': definition_id}})[0]
+
+                        response_tags = [
+                            '<choiceresponse',
+                            '<multiplechoiceresponse',
+                            '<truefalseresponse',
+                            '<optionresponse',
+                            '<numericalresponse',
+                            '<stringresponse',
+                            '<customresponse',
+                            '<symbolicresponse',
+                            '<coderesponse',
+                            '<externalresponse',
+                            '<formularesponse',
+                            '<schematicresponse',
+                            '<imageresponse',
+                            '<annotationresponse',
+                            '<choicetextresponse',
+                        ]
+                        pattern = '|'.join(response_tags)
+
+                        # data is the XML definition of the problem.
+                        data = definition['fields']['data']
+
+                        weight = len(re.findall(pattern, data))
+
+                        if not weight:
+                            log.warning(f"No response tag found in problem {module_location}")
+                else:
+                    # Other blocks than problem don't have a weight
+                    weight = ''
+
                 # We build a dict for each component of the course with all the information
                 # that will be exported as a table
 
@@ -327,7 +367,8 @@ class CourseStructuresDatasource:
                     block_type=block_type,
                     block_id=block_id,
                     display_name=display_name,
-                    children=children
+                    children=children,
+                    weight=weight
                 )
 
             # After checking all the blocks, there should be one for the course root
@@ -446,6 +487,7 @@ class CourseStructuresDatasource:
                     block_data.get('vertical'),
                     block_data.get('library_content'),
                     block_data.get('component_name'),
+                    block_data.get('weight'),
                 ]
                 csv_writer.writerow(row)
 

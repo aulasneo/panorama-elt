@@ -1,5 +1,8 @@
 # Change log
 
+## Unreleased
+Add problem weight to course structures
+
 ## Version 0.2.4 (2023-09-04)
 Refactor get_structures to fix a bug that impacts courses reruns
 ## 0.2.3

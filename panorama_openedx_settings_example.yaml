@@ -55,6 +55,8 @@ datasources:
       type: varchar
     - name: component
       type: varchar
+    - name: weight
+      type: varchar
 - type: mysql
   name: openedx_mysql
   mysql_username:
