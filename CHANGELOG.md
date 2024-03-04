@@ -1,6 +1,6 @@
 # Change log
 
-## Unreleased
+## Version 0.3.1 (2024-03-04)
 Fix requirements versions
 
 ## Version 0.3.0 (2023-09-26)
