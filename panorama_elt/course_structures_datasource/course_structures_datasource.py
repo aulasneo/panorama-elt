@@ -344,12 +344,16 @@ class CourseStructuresDatasource:
                         pattern = '|'.join(response_tags)
 
                         # data is the XML definition of the problem.
-                        data = definition['fields']['data']
+                        data = definition['fields'].get('data')
 
-                        weight = len(re.findall(pattern, data))
+                        if data:
 
-                        if not weight:
-                            log.warning(f"No response tag found in problem {module_location}")
+                            weight = len(re.findall(pattern, data))
+
+                            if not weight:
+                                log.warning(f"No response tag found in problem {module_location}")
+                        else:
+                            log.warning(f"No data found in problem {module_location}")
                 else:
                     # Other blocks than problem don't have a weight
                     weight = ''

@@ -1,5 +1,8 @@
 # Change log
 
+## Unreleased
+Fix bug that crashes when there is no data in a problem
+
 ## Version 0.3.1 (2024-03-04)
 Fix requirements versions
 
