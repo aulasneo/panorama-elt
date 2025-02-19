@@ -1,6 +1,6 @@
 # Change log
 
-## Unreleased
+## Version 0.3.2 (2025-02-19)
 Fix bug that crashes when there is no data in a problem
 
 ## Version 0.3.1 (2024-03-04)
