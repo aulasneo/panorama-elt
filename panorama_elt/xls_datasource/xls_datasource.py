@@ -56,7 +56,9 @@ class XLSDatasource:
         :return: list of sheet names
         """
         workbook = openpyxl.load_workbook(self.location)
-        return workbook.get_sheet_names()
+        sheet_names = workbook.sheetnames
+        workbook.close()
+        return sheet_names
 
     def get_fields(self, table: str, force_query: bool = False) -> list:
         """
@@ -73,7 +75,7 @@ class XLSDatasource:
             return self.table_fields.get(table)
 
         workbook = openpyxl.load_workbook(self.location)
-        sheet = workbook.get_sheet_by_name(table)
+        sheet = workbook[table]
         fields = []
 
         colnum = 1
@@ -103,8 +105,13 @@ class XLSDatasource:
         """
 
         workbook = openpyxl.load_workbook(self.location)
-        for table, fields in self.table_fields.items():
-            sheet = workbook.get_sheet_by_name(table)
+        table_names = self.table_fields.keys() or workbook.sheetnames
+        for table in table_names:
+            if selected_tables and table not in selected_tables.split(','):
+                continue
+
+            fields = self.table_fields.get(table) or [f.get('name') for f in self.get_fields(table)]
+            sheet = workbook[table]
 
             rownum = 2
             dataset = []

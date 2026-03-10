@@ -52,7 +52,7 @@ class CSVDatasource:
         :return: list of sheet names
         """
 
-        return os.path.basename(os.path.splitext(self.location)[0])
+        return [os.path.basename(os.path.splitext(self.location)[0])]
 
     def get_fields(self, table: str, force_query: bool = False) -> list:
         """
@@ -89,6 +89,9 @@ class CSVDatasource:
         :return:
         """
 
-        table = list(self.table_fields.keys())[0]
+        table = next(iter(self.table_fields), self.get_tables()[0])
+
+        if selected_tables and table not in selected_tables.split(','):
+            return
 
         self.datalake.upload_table_from_file(filename=self.location, table=table, update_partitions=False)

@@ -14,8 +14,7 @@ the most relevant tables. Then it uploads the data to the datalake and updates a
 ## Requirements
 
 - Linux system
-- Python 3.5 or newer
-- Python3 distutils (`sudo apt install python3-distutils`)
+- Python 3.12
 - make (`sudo apt install make`)
 - virtualenv (`pip install virtualenv`)
 
@@ -320,4 +319,3 @@ This software is licenced under Apache 2.0 license. Please see LICENSE for more 
 
 Contributions are welcome! Please submit your PR and we will check it.
 For questions, please send an email to <mailto:andres@aulasneo.com>.
-

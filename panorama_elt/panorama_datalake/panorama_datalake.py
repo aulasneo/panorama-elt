@@ -372,9 +372,10 @@ class PanoramaDatalake:
     def create_table_view(self, datalake_table_name: str, view_name: str, fields: list):
 
         fields_definition = []
+        fields = list(fields)
 
         if self.datalake_settings.get('base_partitions'):
-            fields += self.datalake_settings.get('base_partitions')
+            fields.extend(self.datalake_settings.get('base_partitions'))
 
         for field in fields:
             field_type = field.get('type').upper()
