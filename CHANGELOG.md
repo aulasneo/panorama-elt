@@ -1,6 +1,6 @@
 # Change log
 
-## Unreleased
+## Version 1.0.0 (2026-06-04)
 feat: Refactored CLI to simplify code
 feat: Added unit, quality and coverage tests
 feat: Added CI workflows
