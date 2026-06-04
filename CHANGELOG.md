@@ -1,5 +1,10 @@
 # Change log
 
+## Unreleased
+feat: Refactored CLI to simplify code
+feat: Added unit, quality and coverage tests
+feat: Added CI workflows
+
 ## Version 0.3.2 (2025-02-19)
 Fix bug that crashes when there is no data in a problem
 

@@ -88,7 +88,6 @@ def _get_datasource(datalake, ds_settings):
         datasource = CSVDatasource(datalake=datalake, datasource_settings=ds_settings)
 
     elif ds_type == 'xls':
-
         datasource = XLSDatasource(datalake=datalake, datasource_settings=ds_settings)
 
     else:
@@ -98,81 +97,90 @@ def _get_datasource(datalake, ds_settings):
     return datasource
 
 
+def _selection_options(func):
+    """Attach the shared --all/--datasource/--tables selectors to a command.
+
+    Applied bottom-up so the rendered help order is --all, --datasource, --tables.
+    """
+    func = click.option("--tables", "-t", default=None,
+                        help="Comma separated list of tables to operate on")(func)
+    func = click.option("--datasource", "-d", default=None,
+                        help="Operate only on this datasource")(func)
+    func = click.option("--all", "-a", "all_", is_flag=True, default=False,
+                        help="Operate on all tables of all datasources")(func)
+    return func
+
+
+def _dispatch(ctx, worker, all_, datasource, tables, **extra):
+    """Validate the shared selector flags, then run the worker.
+
+    Reproduces the guards every command used to repeat:
+      * --all together with --tables is rejected
+      * at least one of --all/--datasource/--tables must be given
+    """
+    if all_ and tables:
+        click.echo("--all and --table cannot be used together")
+        return
+    if not all_ and not (datasource or tables):
+        click.echo("Either --all or --datasource or --table must be specified")
+        return
+    worker(ctx, datasource=datasource, tables=tables, **extra)
+
+
+def _iter_datasources(settings, datasource=None):
+    """Yield datasource settings, optionally filtered by datasource name."""
+    for ds_settings in settings.get('datasources'):
+        if datasource and ds_settings.get('name') != datasource:
+            continue
+        yield ds_settings
+
+
+def _iter_tables(settings, datasource=None, tables=None):
+    """Yield (datasource_settings, table_setting) pairs matching the filters."""
+    selected = tables.split(',') if tables else None
+    for ds_settings in _iter_datasources(settings, datasource):
+        for table_setting in ds_settings.get('tables'):
+            if selected and table_setting.get('name') not in selected:
+                continue
+            yield ds_settings, table_setting
+
+
+def _datalake_names(table_setting, base_prefix):
+    """Return the (table, view) datalake names for a table setting, with defaults."""
+    name = table_setting.get('name')
+    table_name = table_setting.get('datalake_table_name') or "{}_raw_{}".format(base_prefix, name)
+    view_name = table_setting.get('datalake_table_view') or "{}_table_{}".format(base_prefix, name)
+    return table_name, view_name
+
+
 @cli.command(help='Extracts the data from the datasources and uploads to the datalake')
-@click.option("--all", "-a", "all_", is_flag=True, default=False,
-              help="Extract and load all tables of all datasource")
-@click.option("--datasource", "-d", required=False, default=None,
-              help="Extract and load only for this datasource")
-@click.option("--tables", "-t", required=False, default=None,
-              help="Comma separated list of tables to extract and load")
-@click.option('--force', is_flag=True, help='Force upload all partitions. False by default', default=False)
+@_selection_options
+@click.option('--force', is_flag=True, default=False, help='Force upload all partitions. False by default')
 @click.pass_context
 def extract_and_load(ctx, all_, datasource, tables, force):
-    """
-    Click command to run _create_datalake_tables
-    :return:
-    """
-    if all_:
-        if tables:
-            click.echo("--all and --table cannot be used together")
-        else:
-            if datasource:
-                _extract_and_load(ctx, selected_datasource=datasource, force=force)
-            else:
-                _extract_and_load(ctx, force=force)
-    else:
-        if datasource or tables:
-            _extract_and_load(ctx, selected_datasource=datasource, selected_tables=tables, force=force)
-        else:
-            click.echo("Either --all or --datasource or --table must be specified")
+    """Click command to run _extract_and_load."""
+    _dispatch(ctx, _extract_and_load, all_, datasource, tables, force=force)
 
 
-def _extract_and_load(ctx, selected_datasource=None, selected_tables=None, force=False):
+def _extract_and_load(ctx, datasource=None, tables=None, force=False):
     """
     Query the datasources defined in the settings and uploads to the datalake
     :param force: boolean. Force a full dump for tables with incremental updates configured
     :return:
     """
-    settings = ctx.obj.get('settings')
-    datalake = PanoramaDatalake(datalake_settings=settings.get('datalake'))
-
-    for ds_settings in settings.get('datasources'):
-
-        if selected_datasource and ds_settings.get("name") != selected_datasource:
-            continue
-
-        datasource = _get_datasource(datalake, ds_settings)
-
-        datasource.extract_and_load(selected_tables=selected_tables, force=force)
+    datalake = ctx.obj['datalake']
+    for ds_settings in _iter_datasources(ctx.obj['settings'], datasource):
+        datasource_obj = _get_datasource(datalake, ds_settings)
+        datasource_obj.extract_and_load(selected_tables=tables, force=force)
 
 
 @cli.command(help='Creates datalake tables for all tables defined in the settings file. '
                   'Table fields must be defined.')
-@click.option("--all", "-a", "all_", is_flag=True, default=False,
-              help="Create all tables of all datasource")
-@click.option("--datasource", "-d", required=False, default=None,
-              help="Create tables only for this datasource")
-@click.option("--tables", "-t", required=False, default=None,
-              help="Comma separated list of tables to create")
+@_selection_options
 @click.pass_context
 def create_datalake_tables(ctx, all_, datasource, tables):
-    """
-    Click command to run _create_datalake_tables
-    :return:
-    """
-    if all_:
-        if tables:
-            click.echo("--all and --table cannot be used together")
-        else:
-            if datasource:
-                _create_datalake_tables(ctx, datasource)
-            else:
-                _create_datalake_tables(ctx)
-    else:
-        if datasource or tables:
-            _create_datalake_tables(ctx, datasource, tables)
-        else:
-            click.echo("Either --all or --datasource or --table must be specified")
+    """Click command to run _create_datalake_tables."""
+    _dispatch(ctx, _create_datalake_tables, all_, datasource, tables)
 
 
 def _create_datalake_tables(ctx, datasource=None, tables=None):
@@ -180,73 +188,38 @@ def _create_datalake_tables(ctx, datasource=None, tables=None):
     Connect to Athena and create the table definition for the MySQL tables
     :return:
     """
-    settings = ctx.obj.get('settings')
-    datalake = PanoramaDatalake(datalake_settings=settings.get('datalake'))
-
+    settings = ctx.obj['settings']
+    datalake = ctx.obj['datalake']
     base_prefix = settings.get('datalake').get('base_prefix')
 
-    # Create tables for all datasources
-    for datasource_settings in settings.get('datasources'):
-        if datasource and datasource_settings.get('name') != datasource:
-            continue
-        for table_setting in datasource_settings.get('tables'):
-            if tables and table_setting.get('name') not in tables.split(','):
-                continue
+    for _ds_settings, table_setting in _iter_tables(settings, datasource, tables):
+        partitions = table_setting.get('partitions')
+        partition_fields = partitions.get('partition_fields') if partitions else None
 
-            partitions = table_setting.get('partitions')
-            if partitions:
-                partition_fields = partitions.get('partition_fields')
-            else:
-                partition_fields = None
+        fields_and_types = table_setting.get('fields')
+        if fields_and_types:
+            fields = [f.get("name") for f in fields_and_types]
+            datalake_table_name, _view = _datalake_names(table_setting, base_prefix)
 
-            fields_and_types = table_setting.get('fields')
-
-            if fields_and_types:
-                fields = [f.get("name") for f in fields_and_types]
-
-                datalake_table_name = table_setting.get('datalake_table_name') or "{}_raw_{}".format(
-                    base_prefix, table_setting.get('name'))
-
-                log.info("Creating or updating datalake table for {}".format(table_setting.get('name')))
-                datalake.create_datalake_table(
-                    table=table_setting.get('name'),
-                    fields=fields,
-                    field_partitions=partition_fields,
-                    datalake_table=datalake_table_name
-                )
-
-            else:
-                log.warning("No fields defined for table {}. Skipping table creation".format(table_setting.get('name')))
+            log.info("Creating or updating datalake table for {}".format(table_setting.get('name')))
+            datalake.create_datalake_table(
+                table=table_setting.get('name'),
+                fields=fields,
+                field_partitions=partition_fields,
+                datalake_table=datalake_table_name
+            )
+        else:
+            log.warning("No fields defined for table {}. Skipping table creation".format(table_setting.get('name')))
 
     click.echo(datalake.get_athena_executions())
 
 
 @cli.command(help='Deletes datalake tables')
-@click.option("--all", "-a", "all_", is_flag=True, default=False,
-              help="Deletes all tables of all datasource")
-@click.option("--datasource", "-d", required=False, default=None,
-              help="Deletes tables only for this datasource")
-@click.option("--tables", "-t", required=False, default=None,
-              help="Comma separated list of tables to delete")
+@_selection_options
 @click.pass_context
 def drop_datalake_tables(ctx, all_, datasource, tables):
-    """
-    Click command to run _create_datalake_tables
-    :return:
-    """
-    if all_:
-        if tables:
-            click.echo("--all and --table cannot be used together")
-        else:
-            if datasource:
-                _drop_datalake_tables(ctx, datasource)
-            else:
-                _drop_datalake_tables(ctx)
-    else:
-        if datasource or tables:
-            _drop_datalake_tables(ctx, datasource, tables)
-        else:
-            click.echo("Either --all or --datasource or --table must be specified")
+    """Click command to run _drop_datalake_tables."""
+    _dispatch(ctx, _drop_datalake_tables, all_, datasource, tables)
 
 
 def _drop_datalake_tables(ctx, datasource=None, tables=None):
@@ -254,125 +227,63 @@ def _drop_datalake_tables(ctx, datasource=None, tables=None):
     Connect to Athena and delete the table definition for the MySQL tables
     :return:
     """
-    settings = ctx.obj.get('settings')
-    datalake = PanoramaDatalake(datalake_settings=settings.get('datalake'))
-
-    # Create tables for all datasources
+    settings = ctx.obj['settings']
+    datalake = ctx.obj['datalake']
     base_prefix = settings.get('datalake').get('base_prefix')
-    for datasource_settings in settings.get('datasources'):
-        if datasource and datasource_settings.get('name') != datasource:
-            continue
-        for table_setting in datasource_settings.get('tables'):
-            if tables and table_setting.get('name') not in tables.split(','):
-                continue
 
-            datalake_table_name = table_setting.get('datalake_table_name') or "{}_raw_{}".format(
-                base_prefix, table_setting.get('name'))
-            datalake_view_name = table_setting.get('datalake_table_view') or "{}_table_{}".format(
-                base_prefix, table_setting.get('name'))
+    for _ds_settings, table_setting in _iter_tables(settings, datasource, tables):
+        datalake_table_name, datalake_view_name = _datalake_names(table_setting, base_prefix)
 
-            log.info("Dropping {}".format(datalake_table_name))
-            datalake.drop_datalake_table(datalake_table=datalake_table_name)
+        log.info("Dropping {}".format(datalake_table_name))
+        datalake.drop_datalake_table(datalake_table=datalake_table_name)
 
-            log.info("Dropping {}".format(datalake_view_name))
-            datalake.drop_datalake_view(view=datalake_view_name)
+        log.info("Dropping {}".format(datalake_view_name))
+        datalake.drop_datalake_view(view=datalake_view_name)
 
     click.echo(datalake.get_athena_executions())
 
 
 @cli.command(help='Creates views based on the tables defined. Tables must be created first.')
-@click.option("--all", "-a", "all_", is_flag=True, default=False,
-              help="Creates all table views of all datasource")
-@click.option("--datasource", "-d", required=False, default=None,
-              help="Creates table views only for this datasource")
-@click.option("--tables", "-t", required=False, default=None,
-              help="Comma separated list of tables views to create")
+@_selection_options
 @click.pass_context
 def create_table_views(ctx, all_, datasource, tables):
-    """
-    Click command to run _create_datalake_tables
-    :return:
-    """
-    if all_:
-        if tables:
-            click.echo("--all and --table cannot be used together")
-        else:
-            if datasource:
-                _create_table_view(ctx, datasource)
-            else:
-                _create_table_view(ctx)
-    else:
-        if datasource or tables:
-            _create_table_view(ctx, datasource, tables)
-        else:
-            click.echo("Either --all or --datasource or --table must be specified")
+    """Click command to run _create_table_view."""
+    _dispatch(ctx, _create_table_view, all_, datasource, tables)
 
 
 def _create_table_view(ctx, datasource=None, tables=None):
-    settings = ctx.obj.get('settings')
-    datalake = PanoramaDatalake(datalake_settings=settings.get('datalake'))
-
+    """Create an Athena view for every table matching the filters."""
+    settings = ctx.obj['settings']
+    datalake = ctx.obj['datalake']
     base_prefix = settings.get('datalake').get('base_prefix')
-    for datasource_settings in settings.get('datasources'):
-        if datasource and datasource_settings.get('name') != datasource:
-            continue
 
-        for table_setting in datasource_settings.get('tables'):
+    for ds_settings, table_setting in _iter_tables(settings, datasource, tables):
+        table_name = table_setting.get('name')
+        log.debug("Creating table view for table {} in datasource {}".format(
+            table_name, ds_settings.get('name')))
 
-            table_name = table_setting.get('name')
-            if tables and table_name not in tables.split(','):
-                continue
-
-            log.debug("Creating table view for table {} in datasource {}".format(
-                table_name, datasource_settings.get('name')))
-
-            fields = table_setting.get('fields')
-            if fields:
-                datalake_table_name = table_setting.get('datalake_table_name') or "{}_raw_{}".format(
-                    base_prefix, table_setting.get('name'))
-                datalake_view_name = table_setting.get('datalake_table_view') or "{}_table_{}".format(
-                    base_prefix, table_setting.get('name'))
-
-                log.info("Creating table view {}".format(datalake_view_name))
-
-                datalake.create_table_view(datalake_table_name=datalake_table_name, view_name=datalake_view_name,
-                                           fields=fields)
-            else:
-                log.warning("No fields defined for table {}".format(table_name))
+        fields = table_setting.get('fields')
+        if fields:
+            datalake_table_name, datalake_view_name = _datalake_names(table_setting, base_prefix)
+            log.info("Creating table view {}".format(datalake_view_name))
+            datalake.create_table_view(datalake_table_name=datalake_table_name, view_name=datalake_view_name,
+                                       fields=fields)
+        else:
+            log.warning("No fields defined for table {}".format(table_name))
 
     click.echo(datalake.get_athena_executions())
 
 
 @cli.command(help="Queries the datasource's tables and updates the tables section of the settings file. "
                   "Use with care.")
-@click.option("--all", "-a", "all_", is_flag=True, default=False,
-              help="Sets all table fields of all datasource")
-@click.option("--datasource", "-d", required=False, default=None,
-              help="Sets table fields only for this datasource")
-@click.option("--tables", "-t", required=False, default=None,
-              help="Comma separated list of tables to set fields")
+@_selection_options
 @click.pass_context
 def set_tables(ctx, all_, datasource, tables):
-    """
-    Click command to run _create_datalake_tables
-    :return:
-    """
-    if all_:
-        if tables:
-            click.echo("--all and --table cannot be used together")
-        else:
-            if datasource:
-                _set_tables(ctx, datasource)
-            else:
-                _set_tables(ctx)
-    else:
-        if datasource or tables:
-            _set_tables(ctx, datasource, tables)
-        else:
-            click.echo("Either --all or --datasource or --table must be specified")
+    """Click command to run _set_tables."""
+    _dispatch(ctx, _set_tables, all_, datasource, tables)
 
 
-def _set_tables(ctx, datasource: str = None, tables: str = None) -> None:
+def _set_tables(ctx, datasource=None, tables=None):
     """
     Deletes the table settings and replaces with an empty dict containing only the table names
     returned by the datasource
@@ -381,21 +292,17 @@ def _set_tables(ctx, datasource: str = None, tables: str = None) -> None:
     :param datasource: Datasource to operate on
     :return: None
     """
-    settings = ctx.obj.get('settings')
-    datalake = PanoramaDatalake(datalake_settings=settings.get('datalake'))
-    config_file = ctx.obj.get('config_file')
+    settings = ctx.obj['settings']
+    datalake = ctx.obj['datalake']
+    config_file = ctx.obj['config_file']
 
-    for ds_settings in settings.get('datasources'):
+    selected = tables.split(',') if tables else None
+    for ds_settings in _iter_datasources(settings, datasource):
+        datasource_obj = _get_datasource(datalake, ds_settings)
+        ds_tables = datasource_obj.get_tables()
 
-        if datasource and datasource != ds_settings.get('name'):
-            continue
-
-        datasource = _get_datasource(datalake, ds_settings)
-        ds_tables = datasource.get_tables()
-
-        if tables:
-            selected_tables = tables.split(',')
-            table_list = [t for t in ds_tables if t in selected_tables]
+        if selected:
+            table_list = [t for t in ds_tables if t in selected]
         else:
             table_list = ds_tables
 
@@ -408,31 +315,11 @@ def _set_tables(ctx, datasource: str = None, tables: str = None) -> None:
 
 @cli.command(help="Queries the datasource's tables and updates the fields of the tables in the settings file. "
                   "Use with care.")
-@click.option("--all", "-a", "all_", is_flag=True, default=False,
-              help="Sets all table fields of all datasource")
-@click.option("--datasource", "-d", required=False, default=None,
-              help="Sets table fields only for this datasource")
-@click.option("--tables", "-t", required=False, default=None,
-              help="Comma separated list of tables to set fields")
+@_selection_options
 @click.pass_context
 def set_tables_fields(ctx, all_, datasource, tables):
-    """
-    Click command to run _create_datalake_tables
-    :return:
-    """
-    if all_:
-        if tables:
-            click.echo("--all and --table cannot be used together")
-        else:
-            if datasource:
-                _set_tables_fields(ctx, datasource)
-            else:
-                _set_tables_fields(ctx)
-    else:
-        if datasource or tables:
-            _set_tables_fields(ctx, datasource, tables)
-        else:
-            click.echo("Either --all or --datasource or --table must be specified")
+    """Click command to run _set_tables_fields."""
+    _dispatch(ctx, _set_tables_fields, all_, datasource, tables)
 
 
 def _set_tables_fields(ctx, datasource=None, tables=None):
@@ -442,28 +329,23 @@ def _set_tables_fields(ctx, datasource=None, tables=None):
     * Not recommended for Open edX installations *
     :return:
     """
-    settings = ctx.obj.get('settings')
-    datalake = PanoramaDatalake(datalake_settings=settings.get('datalake'))
-    config_file = ctx.obj.get('config_file')
+    settings = ctx.obj['settings']
+    datalake = ctx.obj['datalake']
+    config_file = ctx.obj['config_file']
 
-    for ds_settings in settings.get('datasources'):
-
-        if datasource and datasource != ds_settings.get('name'):
-            continue
+    selected = tables.split(',') if tables else None
+    for ds_settings in _iter_datasources(settings, datasource):
+        datasource_obj = _get_datasource(datalake, ds_settings)
 
         for table_settings in ds_settings.get('tables'):
-
             table_name = table_settings.get('name')
-            if tables and table_name not in tables.split(','):
+            if selected and table_name not in selected:
                 continue
 
             log.debug("Setting fields for table {} in datasource {}".format(
                 table_name, ds_settings.get('name')))
 
-            datasource = _get_datasource(datalake, ds_settings)
-
-            table_fields = datasource.get_fields(table=table_name, force_query=True)
-            table_settings['fields'] = table_fields
+            table_settings['fields'] = datasource_obj.get_fields(table=table_name, force_query=True)
 
     save_settings(config_file=config_file, settings=settings)
 
@@ -474,20 +356,18 @@ def _set_tables_fields(ctx, datasource=None, tables=None):
 @click.pass_context
 def test_connections(ctx):
     """Test the datalake connection and every configured datasource connection."""
-    settings = ctx.obj.get('settings')
-    datalake_settings = settings.get('datalake')
+    datalake = ctx.obj['datalake']
 
     results = []
 
     click.echo("Testing datalake...")
-    datalake = PanoramaDatalake(datalake_settings=datalake_settings)
     results.append(datalake.test_connections())
 
-    for datasource_settings in settings.get('datasources'):
+    for datasource_settings in ctx.obj['settings'].get('datasources'):
         click.echo("Testing {}...".format(datasource_settings.get('name')))
 
-        datasource = _get_datasource(datalake, datasource_settings)
-        results.append(datasource.test_connections())
+        datasource_obj = _get_datasource(datalake, datasource_settings)
+        results.append(datasource_obj.test_connections())
 
     for r in results:
         for k, v in r.items():
