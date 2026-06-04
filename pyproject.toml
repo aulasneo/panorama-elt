@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "panorama-elt"
+description = "Tools to extract data, load to the datalake and transform into a source of truth for Panorama analytics."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+authors = [{ name = "Aulasneo", email = "info@aulasneo.com" }]
+keywords = ["openedx", "analytics", "etl", "datalake", "panorama"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+dynamic = ["version", "dependencies"]
+
+[project.urls]
+Homepage = "https://github.com/aulasneo/panorama-elt"
+
+[project.scripts]
+panorama-elt = "panorama_elt.panorama_elt:main"
+
+[tool.setuptools]
+packages = { find = { include = ["panorama_elt*"], exclude = ["tests*"] } }
+
+[tool.setuptools.dynamic]
+version = { attr = "panorama_elt.__about__.__version__" }
+dependencies = { file = ["requirements.in"] }
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "--cov=panorama_elt --cov-report=term-missing"
+
+[tool.coverage.run]
+source = ["panorama_elt"]
+omit = ["panorama_elt/__about__.py"]
+
+[tool.pylint.main]
+fail-under = 9.5
+
+[tool.pylint.format]
+max-line-length = 120
+
+[tool.pylint."messages control"]
+# Stylistic / project-preference checks intentionally disabled:
+#   - logging-* interpolation: this codebase formats log messages with .format()
+#   - consider-using-f-string: %/.format() style is used consistently here
+#   - duplicate-code: the datasource modules share intentional boilerplate
+#   - no-value-for-parameter: false positive on click command decorators
+#   - design metrics (too-many-*): relaxed for the CLI/datasource modules
+disable = [
+    "logging-format-interpolation",
+    "logging-fstring-interpolation",
+    "consider-using-f-string",
+    "duplicate-code",
+    "no-value-for-parameter",
+    "too-many-locals",
+    "too-many-branches",
+    "too-many-nested-blocks",
+    "too-many-instance-attributes",
+    "too-many-arguments",
+    "too-many-positional-arguments",
+]

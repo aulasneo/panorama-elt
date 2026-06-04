@@ -6,6 +6,7 @@ versions of each course. The table will be saved as a csv file and uploaded to S
 import csv
 import os
 import re
+import sys
 
 import bson
 import pymysql
@@ -15,10 +16,11 @@ import pymongo.errors
 from panorama_elt.panorama_datalake.panorama_datalake import PanoramaDatalake
 from panorama_elt.panorama_logger.setup_logger import log
 
-filename = 'course_structures.csv'
+FILENAME = 'course_structures.csv'
 
 
 class CourseStructuresDatasource:
+    """Builds the course structures table from the Open edX modulestore and uploads it to the datalake."""
 
     def __init__(
             self,
@@ -32,23 +34,23 @@ class CourseStructuresDatasource:
         mongodb_host = datasource_settings.get('mongodb_host', '127.0.0.1')
         self.mongodb_database = datasource_settings.get('mongodb_database', 'edxapp')
 
-        # Create a connection using MongoClient. 
+        # Create a connection using MongoClient.
         log.debug("Connecting to mongo. Host: {} username: {} password: {}, db: {}".format(
             mongodb_host, mongodb_username, mongodb_password, self.mongodb_database))
 
         try:
             self.client = MongoClient(
-                    host=mongodb_host, 
-                    username=mongodb_username, 
-                    password=mongodb_password, 
-                    authSource=self.mongodb_database, 
-                    readPreference='secondaryPreferred', 
+                    host=mongodb_host,
+                    username=mongodb_username,
+                    password=mongodb_password,
+                    authSource=self.mongodb_database,
+                    readPreference='secondaryPreferred',
                     directConnection=True
                     )
             self.mongodb = self.client[self.mongodb_database]
         except pymongo.errors.ConfigurationError as e:
             log.error(e)
-            exit(1)
+            sys.exit(1)
 
         # With split mongo, the active versions are stored in a mysql table
         if datasource_settings.get('mysql_host'):
@@ -75,11 +77,10 @@ class CourseStructuresDatasource:
 
             except pymysql.err.OperationalError as e:
                 log.error(e)
-                exit(1)
+                sys.exit(1)
         else:
             log.info("MySQL host not defined. Using MongoDB to get active versions")
             self.use_split_mongo_active_versions = False
-
 
     def test_connections(self) -> dict:
         """
@@ -108,7 +109,7 @@ class CourseStructuresDatasource:
         """
         return ['course_structures']
 
-    def get_fields(self, table: str, force_query: bool = False) -> list:
+    def get_fields(self, table: str, force_query: bool = False) -> list:  # pylint: disable=unused-argument
         """
         Returns a list of fields of the table in the database using an existing mysql cursor
 
@@ -143,8 +144,8 @@ class CourseStructuresDatasource:
     def get_structures(self, active_versions: dict) -> dict:
         """
         Returns a list of records in the structures collections whose id are keys of id_list
-        :param active_versions: dict. The keys of the dict are used to filter the structures by id. The keys must be of type
-            'bson.objectid.ObjectId', as returned by pymongo's find
+        :param active_versions: dict. The keys of the dict are used to filter the structures by id.
+            The keys must be of type 'bson.objectid.ObjectId', as returned by pymongo's find
         :return: list of structures
         """
         published_branches = [active_version['published_branch'] for _, active_version in active_versions.items()]
@@ -152,7 +153,7 @@ class CourseStructuresDatasource:
         log.debug("Getting blocks of {} published branches".format(len(published_branches)))
         cursor = self.mongodb.modulestore.structures.find({'_id': {'$in': published_branches}})
 
-        structs = dict()
+        structs = {}
         for record in cursor:
             structs[record['_id']] = record
         return structs
@@ -173,7 +174,7 @@ class CourseStructuresDatasource:
         # Filter records without published-branch. This avoids loading e.g. libraries.
         cursor = self.mongodb.modulestore.active_versions.find({'versions.published-branch': {'$exists': True}})
 
-        active_versions = dict()
+        active_versions = {}
 
         try:
             for record in cursor:
@@ -239,7 +240,7 @@ class CourseStructuresDatasource:
         self.cur.execute(query)
         rows = self.cur.fetchall()
 
-        active_versions = dict()
+        active_versions = {}
 
         for record in rows:
 
@@ -279,7 +280,7 @@ class CourseStructuresDatasource:
 
         log.debug("Getting blocks for {} active versions".format(len(active_versions)))
 
-        blocks = dict()
+        blocks = {}
 
         # Course structures is a list with one item per course, with the structure of the current active version.
         # There should be one and only one item in active_versions for each one in course_structures
@@ -363,17 +364,17 @@ class CourseStructuresDatasource:
 
                 log.debug("Creating block {} with name {} and {} children".format(
                     module_location, display_name, len(children) if children else 0))
-                blocks[module_location] = dict(
-                    organization=organization,
-                    course_code=course_code,
-                    course_edition=course_edition,
-                    course_id=course_id,
-                    block_type=block_type,
-                    block_id=block_id,
-                    display_name=display_name,
-                    children=children,
-                    weight=weight
-                )
+                blocks[module_location] = {
+                    'organization': organization,
+                    'course_code': course_code,
+                    'course_edition': course_edition,
+                    'course_id': course_id,
+                    'block_type': block_type,
+                    'block_id': block_id,
+                    'display_name': display_name,
+                    'children': children,
+                    'weight': weight,
+                }
 
             # After checking all the blocks, there should be one for the course root
             if course_id not in blocks:
@@ -437,8 +438,8 @@ class CourseStructuresDatasource:
             if block.get('block_type') not in ['course', 'chapter', 'sequential', 'vertical', 'library_content']:
                 block['component_name'] = block.get('display_name')
 
-    def extract_and_load(self, selected_tables: str = None, force: bool = False):
-
+    def extract_and_load(self, selected_tables: str = None, force: bool = False):  # pylint: disable=unused-argument
+        """Build the course structures table from the modulestore and upload it to the datalake."""
         if selected_tables and 'course_structures' not in selected_tables:
             return
 
@@ -470,7 +471,7 @@ class CourseStructuresDatasource:
 
         fields = self.get_fields(table="course_structures")
 
-        with open(filename, 'w') as f:
+        with open(FILENAME, 'w', encoding='utf-8') as f:
             csv_writer = csv.writer(f)
             csv_writer.writerow([f.get('name') for f in fields])
 
@@ -495,8 +496,8 @@ class CourseStructuresDatasource:
                 ]
                 csv_writer.writerow(row)
 
-        self.datalake.upload_table_from_file(filename=filename, table='course_structures', update_partitions=True)
+        self.datalake.upload_table_from_file(filename=FILENAME, table='course_structures', update_partitions=True)
 
-        os.remove(filename)
+        os.remove(FILENAME)
 
         log.debug("Process completed")

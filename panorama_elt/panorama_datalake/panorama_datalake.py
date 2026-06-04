@@ -1,6 +1,7 @@
 """
 Utility class to manage aws datalake for Panorama analytics
 """
+import sys
 import time
 import urllib.parse
 from uuid import uuid4
@@ -13,6 +14,7 @@ from panorama_elt.panorama_logger.setup_logger import log
 
 
 class PanoramaDatalake:
+    """Utility class to manage the AWS datalake (S3, Athena) for Panorama analytics."""
 
     def __init__(self, datalake_settings: dict):
         """
@@ -27,7 +29,7 @@ class PanoramaDatalake:
         self.panorama_raw_data_bucket = datalake_settings.get('panorama_raw_data_bucket')
         if not self.panorama_raw_data_bucket:
             log.error("panorama_raw_data_bucket must be set")
-            exit(1)
+            sys.exit(1)
 
         # List of partitions common to all tables. For Open edX, it's set to {'lms': <LMS_HOST>}.
         self.base_partitions = {}
@@ -97,7 +99,7 @@ class PanoramaDatalake:
                         self.datalake_db, db_list)
             except ClientError as e:
                 log.error(e)
-                exit(1)
+                sys.exit(1)
         else:
             results['Athena'] = result
 
@@ -133,7 +135,7 @@ class PanoramaDatalake:
             return
 
     def get_athena_query_execution(self, execution):
-
+        """Return the execution state of an Athena query given its execution descriptor."""
         execution_id = execution.get('QueryExecutionId')
         try:
             response = self.athena.get_query_execution(QueryExecutionId=execution_id)
@@ -142,7 +144,7 @@ class PanoramaDatalake:
 
         except ClientError as e:
             log.error(e)
-            exit(1)
+            sys.exit(1)
 
     def get_athena_executions(self, max_iter: int = 20):
         """
@@ -289,14 +291,14 @@ class PanoramaDatalake:
             for base_partition in self.base_partitions:
                 partitions_definitions_list.append('`{partition_field}` string'.format(partition_field=base_partition))
         if field_partitions:
-            for field_partitions in field_partitions:
+            for field_partition in field_partitions:
                 partitions_definitions_list.append(
-                    '`{partition_field}` string'.format(partition_field=field_partitions))
+                    '`{partition_field}` string'.format(partition_field=field_partition))
         if partitions_definitions_list:
 
             partitions_definitions = ','.join(partitions_definitions_list)
             partitions_section = """
-                PARTITIONED BY ( 
+                PARTITIONED BY (
                     {partitions_definitions}
                   )
             """.format(partitions_definitions=partitions_definitions)
@@ -315,25 +317,25 @@ class PanoramaDatalake:
                 {fields_definitions}
               )
             {partitions_section}
-            ROW FORMAT SERDE 
-              'org.apache.hadoop.hive.serde2.OpenCSVSerde' 
-            WITH SERDEPROPERTIES ( 
-              'escapeChar'='\\\\', 
-              'quoteChar'='\\"', 
-              'separatorChar'=',') 
-            STORED AS INPUTFORMAT 
-              'org.apache.hadoop.mapred.TextInputFormat' 
-            OUTPUTFORMAT 
+            ROW FORMAT SERDE
+              'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+            WITH SERDEPROPERTIES (
+              'escapeChar'='\\\\',
+              'quoteChar'='\\"',
+              'separatorChar'=',')
+            STORED AS INPUTFORMAT
+              'org.apache.hadoop.mapred.TextInputFormat'
+            OUTPUTFORMAT
               'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
             LOCATION
               '{location}'
             TBLPROPERTIES (
-              'areColumnsQuoted'='false', 
-              'classification'='csv', 
-              'columnsOrdered'='true', 
-              'compressionType'='none', 
-              'delimiter'=',', 
-              'skip.header.line.count'='1', 
+              'areColumnsQuoted'='false',
+              'classification'='csv',
+              'columnsOrdered'='true',
+              'compressionType'='none',
+              'delimiter'=',',
+              'skip.header.line.count'='1',
               'typeOfData'='file')
         """.format(
             datalake_table=datalake_table,
@@ -370,7 +372,7 @@ class PanoramaDatalake:
         self.query_athena(query=query)
 
     def create_table_view(self, datalake_table_name: str, view_name: str, fields: list):
-
+        """Create an Athena view over a datalake table exposing the given fields."""
         fields_definition = []
         fields = list(fields)
 
@@ -406,7 +408,7 @@ class PanoramaDatalake:
                     field=field.get('name'), field_type=field_type))
 
         query = """CREATE OR REPLACE VIEW "{view_name}" AS
-        SELECT {fields_definition} 
+        SELECT {fields_definition}
         FROM "{database}"."{table_name}"
         """.format(view_name=view_name,
                    fields_definition=','.join(fields_definition),

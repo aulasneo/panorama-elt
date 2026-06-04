@@ -6,6 +6,7 @@ panorama --help
 
 """
 import logging
+import sys
 
 import yaml
 
@@ -28,11 +29,11 @@ def load_settings(config_file: str) -> dict:
     :return: settings structure
     """
     try:
-        with open(config_file, 'r') as f:
+        with open(config_file, 'r', encoding='utf-8') as f:
             yaml_settings = yaml.safe_load(f)
     except FileNotFoundError:
         log.error("No config file {} found".format(config_file))
-        exit(1)
+        sys.exit(1)
 
     return yaml_settings
 
@@ -42,7 +43,7 @@ def save_settings(config_file, settings) -> None:
     Save config_file from settings
     :return: settings structure
     """
-    with open(config_file, 'w') as f:
+    with open(config_file, 'w', encoding='utf-8') as f:
         yaml.safe_dump(settings, f, sort_keys=False)
 
 
@@ -52,7 +53,7 @@ def save_settings(config_file, settings) -> None:
 @click.option("--settings", 'file', help="Configuration file", default="panorama_settings.yaml")
 @click.pass_context
 def cli(ctx, debug, file):
-
+    """Panorama ELT command line entry point. Loads settings and the datalake into the context."""
     # ensure that ctx.obj exists and is a dict (in case `cli()` is called
     # by means other than the `if` block below)
     ctx.ensure_object(dict)
@@ -75,7 +76,7 @@ def cli(ctx, debug, file):
 
 
 def _get_datasource(datalake, ds_settings):
-
+    """Instantiate the datasource object matching the configured datasource type."""
     ds_type = ds_settings.get('type')
     if ds_type == 'mysql':
         datasource = MySQLDatasource(datalake=datalake, datasource_settings=ds_settings)
@@ -92,8 +93,7 @@ def _get_datasource(datalake, ds_settings):
 
     else:
         log.error("Datasource type {} not supported".format(ds_type))
-        exit(1)
-        return
+        sys.exit(1)
 
     return datasource
 
@@ -473,6 +473,7 @@ def _set_tables_fields(ctx, datasource=None, tables=None):
 @cli.command(help="Test all connections")
 @click.pass_context
 def test_connections(ctx):
+    """Test the datalake connection and every configured datasource connection."""
     settings = ctx.obj.get('settings')
     datalake_settings = settings.get('datalake')
 
@@ -494,4 +495,5 @@ def test_connections(ctx):
 
 
 def main():
+    """Console-script entry point."""
     cli(obj={})

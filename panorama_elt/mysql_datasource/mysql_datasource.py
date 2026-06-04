@@ -7,6 +7,7 @@ Data can be partitioned by a list of base partitions and a set of fields.
 import datetime
 import os
 import csv
+import sys
 
 import pymysql
 
@@ -39,24 +40,25 @@ def save_rows(filename: str, fields: list, rows: iter) -> None:
     for row in rows:
         fields_list = []
         for field in row:
-            if type(field) is str:
+            if isinstance(field, str):
                 field = field.replace('\\', '\\\\')
                 # Escape newline and CR characters
-                field = field.replace('\r', '\\r') 
-                field = field.replace('\n', '\\n') 
+                field = field.replace('\r', '\\r')
+                field = field.replace('\n', '\\n')
             elif isinstance(field, datetime.datetime):
                 # When the seconds are zero, the microseconds are not displayed
                 field = field.strftime('%Y-%m-%d %H:%M:%S.') + '%06d' % field.microsecond
             fields_list.append(field)
         rows_list.append(fields_list)
 
-    with open(filename, 'w') as f:
+    with open(filename, 'w', encoding='utf-8') as f:
         write = csv.writer(f, doublequote=False, escapechar='\\')
         write.writerow(fields)
         write.writerows(rows_list)
 
 
 class MySQLDatasource:
+    """Extracts MySQL tables to CSV and uploads them to the datalake."""
 
     def __init__(
             self,
@@ -82,7 +84,7 @@ class MySQLDatasource:
 
         except pymysql.err.OperationalError as e:
             log.error(e)
-            exit(1)
+            sys.exit(1)
 
         # This dicts defines which tables have partitions and static fields configurations (if present)
         # The interval is in MYSQL format
@@ -103,7 +105,7 @@ class MySQLDatasource:
                 fields = table_setting.get('fields')
                 if fields:
                     self.table_fields[table_setting.get('name')] = [f.get("name") for f in fields]
-                    self.table_fields_settings[table_setting.get('name')] = [f for f in fields]
+                    self.table_fields_settings[table_setting.get('name')] = list(fields)
 
         self.datalake = datalake
         self.db = mysql_database
@@ -231,7 +233,7 @@ class MySQLDatasource:
         :param force: Forces a full update of all the partitions
         :return:
         """
-        for table in self.table_fields.keys():
+        for table in self.table_fields:
 
             if selected_tables and table not in selected_tables.split(','):
                 continue

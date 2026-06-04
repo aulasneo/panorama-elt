@@ -1,0 +1,13 @@
+boto3
+botocore
+jmespath
+pymongo
+PyMySQL
+python-dateutil
+PyYAML
+s3transfer
+six
+urllib3
+click
+openpyxl
+cryptography

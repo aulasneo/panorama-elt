@@ -7,6 +7,7 @@ The first row must have the field names.
 """
 import csv
 import os
+from pathlib import Path
 
 import openpyxl
 
@@ -43,7 +44,6 @@ class XLSDatasource:
         Performs connections test
         :return: dict with test results
         """
-        from pathlib import Path
         path = Path(self.location)
 
         results = {'XLS': 'OK' if path.is_file() else 'File {} not found'.format(self.location)}
@@ -95,7 +95,7 @@ class XLSDatasource:
 
         return fields_list
 
-    def extract_and_load(self, selected_tables: str = None, force: bool = False):
+    def extract_and_load(self, selected_tables: str = None, force: bool = False):  # pylint: disable=unused-argument
         """
         Upload the file to the datalake
 
@@ -120,13 +120,13 @@ class XLSDatasource:
                 for colnum in range(len(fields)):
                     row.append(sheet.cell(row=rownum, column=colnum+1).value)
                 rownum += 1
-                if all([v is None for v in row]):
+                if all(v is None for v in row):
                     break
                 dataset.append(row)
 
             # Save the dataset in a csv file
             filename = "{}.csv".format(table)
-            with open(filename, 'w') as f:
+            with open(filename, 'w', encoding='utf-8') as f:
                 write = csv.writer(f, doublequote=False, escapechar='\\')
                 write.writerow(fields)
                 write.writerows(dataset)

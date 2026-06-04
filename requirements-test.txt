@@ -1,0 +1,8 @@
+# Runtime dependencies plus the test and quality tooling used by the Makefile.
+-r requirements.txt
+
+pytest
+pytest-cov
+flake8
+pylint
+build

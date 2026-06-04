@@ -5,6 +5,7 @@ This datasource doesn't allow field partitions. Only one file at a time.
 """
 import os
 import csv
+from pathlib import Path
 
 from panorama_elt.panorama_datalake.panorama_datalake import PanoramaDatalake
 from panorama_elt.panorama_logger.setup_logger import log
@@ -39,7 +40,6 @@ class CSVDatasource:
         Performs connections test
         :return: dict with test results
         """
-        from pathlib import Path
         path = Path(self.location)
 
         results = {'CSV': 'OK' if path.is_file() else 'File {} not found'.format(self.location)}
@@ -68,7 +68,7 @@ class CSVDatasource:
         if self.table_fields and self.table_fields.get(table) and not force_query:
             return self.table_fields.get(table)
 
-        with open(self.location, mode='r') as file:
+        with open(self.location, mode='r', encoding='utf-8') as file:
             csv_file = csv.reader(file)
             fields = next(csv_file)
 
@@ -80,7 +80,7 @@ class CSVDatasource:
 
         return fields_list
 
-    def extract_and_load(self, selected_tables: str = None, force: bool = False):
+    def extract_and_load(self, selected_tables: str = None, force: bool = False):  # pylint: disable=unused-argument
         """
         Upload the file to the datalake
 

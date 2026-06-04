@@ -1,0 +1,15 @@
+[flake8]
+max-line-length = 120
+extend-ignore =
+    # E203: whitespace before ':' (conflicts with black-style slicing)
+    E203,
+    # W503: line break before binary operator (deprecated style rule)
+    W503
+exclude =
+    .git,
+    __pycache__,
+    build,
+    dist,
+    venv,
+    .eggs,
+    *.egg-info
