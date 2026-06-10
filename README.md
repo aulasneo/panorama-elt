@@ -290,26 +290,93 @@ Then only the field based partitions detected will be updated. Note that the who
 ### Building the image
 
 Panorama can be run from inside a docker container. There is a Dockerfile included for that purpose.
-The container must bind mount the `/config` directory to hold the coniguration file.
+The image includes the Panorama ELT code and Python dependencies only. Keep the settings file outside the
+image and bind mount it at runtime so settings changes do not require rebuilding the image.
 
 To build the image, run:
 ```shell
-docker build -t aulasneo/panorama-elt:$(python -c "from panorama_elt.__about__ import __version__; print(__version__)") -t aulasneo/panorama-elt:latest .
+docker build -t aulasneo/panorama-elt:$(python3 -c "from panorama_elt.__about__ import __version__; print(__version__)") -t aulasneo/panorama-elt:latest .
 ```
 
-To bind mount the configuration directory and run the image to get a shell prompt, run:
+### Runtime directories
+
+The container should usually use these bind mounts:
+
+- `/config`: settings files, for example `/config/panorama_openedx_settings.yaml`
+- `/work`: temporary CSV work files generated during extraction
+
+The application writes temporary CSV files to the current working directory and deletes them after upload.
+Set the container working directory to `/work` to control where those files are created.
+
+For example, if the host settings file is in `/etc/panorama` and temporary files should be written under
+`/var/lib/panorama/work`, use:
 
 ```shell
-docker run --name panorama -it -v $(pwd)/config:/config  panorama-elt:latest bash
+docker run --rm \
+  -v /etc/panorama:/config:ro \
+  -v /var/lib/panorama/work:/work \
+  -w /work \
+  aulasneo/panorama-elt:latest \
+  --settings /config/panorama_openedx_settings.yaml test-connections
 ```
-Then, from inside the container's shell, you can run panorama commands indicating the location
-of the settings file. E.g.:
+
+Mount `/config` as read-only for regular extraction jobs. Mount it as read-write only for commands that
+update the settings file, such as `set-tables` and `set-tables-fields`.
+
+Note that the container must have network access to the datasources and the datalake to work.
+
+### Periodic extract-and-load from cron
+
+After creating the datalake tables and views, schedule `extract-and-load` from the host crontab.
+This example runs every hour, keeps settings outside the image, and writes logs on the host:
+
+```cron
+0 * * * * docker run --rm -v /etc/panorama:/config:ro -v /var/lib/panorama/work:/work -w /work aulasneo/panorama-elt:latest --settings /config/panorama_openedx_settings.yaml extract-and-load --all >> /var/log/panorama/panorama.log 2>&1
+```
+
+For the first full upload of partitioned tables, run the same container command once with `--force`:
 
 ```shell
-:/# python panorama.py --settings=/config/panorama_openedx_settings.yaml test-connections
+docker run --rm --name panorama-elt \
+  -v /etc/panorama:/config:ro \
+  -v /var/lib/panorama/work:/work \
+  -w /work \
+  aulasneo/panorama-elt:latest \
+  --settings /config/panorama_openedx_settings.yaml extract-and-load --all --force
 ```
 
-Note that the container must have access to the datasources and the datalake to work.
+### One-time setup and maintenance commands
+
+Run one-time commands from the shell with the same image and mounted settings file:
+
+```shell
+docker run --rm -it \
+  -v /etc/panorama:/config:ro \
+  -v /var/lib/panorama/work:/work \
+  -w /work \
+  aulasneo/panorama-elt:latest \
+  --settings /config/panorama_openedx_settings.yaml create-datalake-tables --all
+```
+
+```shell
+docker run --rm -it \
+  -v /etc/panorama:/config:ro \
+  -v /var/lib/panorama/work:/work \
+  -w /work \
+  aulasneo/panorama-elt:latest \
+  --settings /config/panorama_openedx_settings.yaml create-datalake-views --all
+```
+
+For commands that update the settings file, mount `/config` as read-write:
+
+```shell
+docker run --rm -it \
+  -v /etc/panorama:/config:rw \
+  -v /var/lib/panorama/work:/work \
+  -w /work \
+  aulasneo/panorama-elt:latest \
+  --settings /config/panorama_openedx_settings.yaml set-tables-fields --all
+```
 
 ## License
 
