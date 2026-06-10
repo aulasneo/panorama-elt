@@ -1,0 +1,23 @@
+README.md
+  s_7485d88fe519ed::t_7c66f7e73e8879 298
+  s_7485d88fe519ed::t_2b4e0a91b36b05 334
+  s_7485d88fe519ed::t_e1aaed45bba725 293-294,301-333,335-337,340-345,347-350,353-358,361-379
+Dockerfile
+  s_7485d88fe519ed::t_334d642a12ba6d 1-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "9f0aba71febe21e0e79a57b742e47d8f908a0c8d",
+  "prompts": {},
+  "sessions": {
+    "s_7485d88fe519ed": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb2ed-6546-7b31-8268-b64cc04ec6eb",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Andrés González <andres@aulasneo.com>"
+    }
+  }
+}
