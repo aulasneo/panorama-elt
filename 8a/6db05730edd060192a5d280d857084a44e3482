@@ -1,0 +1,45 @@
+README.md
+  s_7485d88fe519ed::t_2e3cd5b99316ed 214-215
+  s_7485d88fe519ed::t_36568f9090953d 235-264
+tests/test_xls_datasource.py
+  s_7485d88fe519ed::t_f651aa8fb4cdd0 119-144
+panorama_elt/mysql_datasource/mysql_datasource.py
+  s_7485d88fe519ed::t_a148365cc5d975 120-140,327,337
+  s_7485d88fe519ed::t_a7be4c5cb05b8c 94-95,100,103,110-115
+panorama_moodle_settings_example.yaml
+  s_7485d88fe519ed::t_cc6324af33d975 33,42,57,104,133,156,173,190,235,250,317,346,396,461,484,499,514,535,616,637,650,693,704,715,765,812,838,887,914,945,1004
+  s_7485d88fe519ed::t_976fbc714b22ff 1-32,34-41,43-56,58-103,105-132,134-155,157-172,174-189,191-234,236-249,251-316,318-345,347-395,397-460,462-483,485-498,500-513,515-534,536-615,617-636,638-649,651-692,694-703,705-714,716-764,766-811,813-837,839-886,888-913,915-944,946-1003,1005-1035
+tests/test_mysql_datasource.py
+  s_7485d88fe519ed::t_ff9be7e1e2b8b4 150-172
+panorama_elt/panorama_datalake/panorama_datalake.py
+  s_7485d88fe519ed::t_4f697e8aef7c2e 218-219,223,228-230,236-237,246,248,258,266-270
+tests/test_panorama_datalake.py
+  s_7485d88fe519ed::t_ab47c0f6161c26 84-101,120,122-126
+tests/test_panorama_elt_workers.py
+  s_7485d88fe519ed::t_4d51175387b612 140-144,165-177
+panorama_elt/xls_datasource/xls_datasource.py
+  s_7485d88fe519ed::t_dc051eba08f7d4 32-33,37,40-44,141-156
+tests/test_csv_datasource.py
+  s_7485d88fe519ed::t_482ab3cef56d8e 63-78
+panorama_elt/panorama_elt.py
+  s_7485d88fe519ed::t_2bdb41e9eeef9c 150,156-160,211
+panorama_elt/csv_datasource/csv_datasource.py
+  s_7485d88fe519ed::t_3af6592bd96184 29-30,33,36-40,104-112,114-119
+  s_7485d88fe519ed::t_8d96892ba990b9 113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "8a6db05730edd060192a5d280d857084a44e3482",
+  "prompts": {},
+  "sessions": {
+    "s_7485d88fe519ed": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb2ed-6546-7b31-8268-b64cc04ec6eb",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Andrés González <andres@aulasneo.com>"
+    }
+  }
+}
