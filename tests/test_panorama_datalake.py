@@ -81,6 +81,24 @@ def test_upload_table_from_file_builds_key_and_uploads(make_datalake):
     )]
 
 
+def test_upload_table_from_file_uses_s3_table_and_filename(make_datalake):
+    datalake, _ = make_datalake({
+        "base_partitions": [{"name": "lms", "value": "example.com"}],
+    })
+    datalake.upload_table_from_file(
+        filename="mdl_course.csv",
+        table="mdl_course",
+        s3_table="course",
+        s3_filename="course.csv",
+    )
+
+    assert datalake.s3_client.uploaded == [(
+        "mdl_course.csv",
+        "test-bucket",
+        "panorama/course/lms=example.com/course.csv",
+    )]
+
+
 def test_upload_table_from_file_without_base_prefix(patch_boto3):
     from panorama_elt.panorama_datalake.panorama_datalake import PanoramaDatalake
 
@@ -99,8 +117,13 @@ def test_upload_table_from_file_updates_partitions_when_requested(make_datalake)
     datalake.upload_table_from_file(
         filename="enrollments.csv", table="enrollments",
         field_partitions={"org": "edX"}, update_partitions=True,
+        s3_table="clean_enrollments", datalake_table_name="custom_table",
     )
-    assert calls == [{"table": "enrollments", "field_partitions": {"org": "edX"}}]
+    assert calls == [{
+        "table": "clean_enrollments",
+        "field_partitions": {"org": "edX"},
+        "datalake_table_name": "custom_table",
+    }]
 
 
 def test_upload_table_from_file_skips_partition_update_without_partitions(patch_boto3):

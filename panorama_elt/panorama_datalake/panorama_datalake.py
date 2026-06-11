@@ -215,20 +215,26 @@ class PanoramaDatalake:
         self.query_athena(query)
 
     def upload_table_from_file(self, filename: str, table: str, field_partitions: iter = None,
-                               update_partitions: bool = False) -> None:
+                               update_partitions: bool = False, s3_table: str = None,
+                               s3_filename: str = None, datalake_table_name: str = None) -> None:
         """
         Upload a file to S3 and -optionally- update the table partitions
         The complete path will be:
-        s3://<bucket>/<base_prefix>/<table>/<base partitions>/<field partitions>/filename
+        s3://<bucket>/<base_prefix>/<s3_table>/<base partitions>/<field partitions>/s3_filename
         Bucket, base_prefix and base_partitions are set in the PanoramaDatalake instance
 
         :param filename: file to be uploaded
         :param table: table name represented in the file
+        :param s3_table: (optional) table directory/name to use in S3 instead of table
+        :param s3_filename: (optional) object filename to use in S3 instead of filename
+        :param datalake_table_name: (optional) table name to use when updating Athena partitions
         :param field_partitions: (optional) list of field name and value pairs to be represented as partitions in Hive
             format <field_name>=<value>
         :param update_partitions: (optional). If set to True, will call update partition on this object. Default: False
         :return: None
         """
+        s3_table = s3_table or table
+        s3_filename = s3_filename or filename
 
         # Base prefix of the file in the S3 buckets. If there is a base_prefix configured, then we start from there.
         # Otherwise, we start from the root of the bucket. The next folder is the table name.
@@ -237,9 +243,9 @@ class PanoramaDatalake:
         # The complete path will be:
         #
         if self.base_prefix:
-            prefix_list = [self.base_prefix, table]
+            prefix_list = [self.base_prefix, s3_table]
         else:
-            prefix_list = [table]
+            prefix_list = [s3_table]
 
         if self.base_partitions:
             for key, value in self.base_partitions.items():
@@ -249,7 +255,7 @@ class PanoramaDatalake:
             for key, value in field_partitions.items():
                 prefix_list.append("{}={}".format(key, urllib.parse.quote(value)))
 
-        prefix_list.append(filename)
+        prefix_list.append(s3_filename)
 
         key = "/".join(prefix_list)
 
@@ -257,7 +263,11 @@ class PanoramaDatalake:
         self.s3_client.upload_file(filename, self.panorama_raw_data_bucket, key)
 
         if update_partitions and (self.base_partitions or field_partitions):
-            self.update_partitions(table=table, field_partitions=field_partitions)
+            self.update_partitions(
+                table=s3_table,
+                field_partitions=field_partitions,
+                datalake_table_name=datalake_table_name,
+            )
 
     def create_datalake_table(self, table: str, fields: list,
                               datalake_table: str = None, field_partitions: list = None) -> None:

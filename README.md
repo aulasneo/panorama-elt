@@ -211,7 +211,8 @@ To configure Panorama EL for other MySQL installation follow these steps:
 ## Datalake directory structure
 
 For each table (or for each field-based partition in each table when enabled), one file in csv format
-will be generated and uploaded. The file will have the same name as the table, with '.csv' extension.
+will be generated and uploaded. The file will have the same name as the table, with '.csv' extension,
+unless `datalake_s3_table` is configured for that table.
 
 Each CSV file will be uploaded to the following directory structure:
 
@@ -230,6 +231,36 @@ E.g.: 'lms=openedx.example.com'
 - field partitions: (optional) For large tables, it's possible to split the datasource in multiple csv files.
 The field will be removed from the csv file, but will appear as a partition field in the datalake.
 In Open edX installations, the default setting is to partition courseware_studentmodule table by course_id.
+
+### Datalake table names and S3 table names
+
+By default, the source table name is used both for the S3 table directory and for the generated datalake
+table/view names. For example, with `base_prefix: moodle` and source table `mdl_course`, the default S3
+location is:
+
+```text
+s3://<bucket>/moodle/mdl_course/<partitions>/mdl_course.csv
+```
+
+Use `datalake_s3_table` to keep the source table name for extraction while using a different table name in
+S3 and in the default Athena table/view names:
+
+```yaml
+tables:
+  - name: mdl_course
+    datalake_s3_table: course
+    fields:
+      ...
+```
+
+This stores data under:
+
+```text
+s3://<bucket>/moodle/course/<partitions>/course.csv
+```
+
+With the same example, the default Athena names become `moodle_raw_course` and `moodle_table_course`.
+You can still override those explicitly with `datalake_table_name` and `datalake_table_view`.
 
 ## Advanced configuration
 

@@ -91,24 +91,52 @@ class MySQLDatasource:
         self.field_partitions = {}
         self.table_fields = {}
         self.table_fields_settings = {}
+        self.table_datalake_names = {}
+        self.table_s3_tables = {}
         self.table_settings = datasource_settings.get('tables')
 
         if self.table_settings:
             for table_setting in self.table_settings:
+                table_name = table_setting.get('name')
                 partitions = table_setting.get('partitions')
                 if partitions:
-                    self.field_partitions[table_setting.get('name')] = {
+                    self.field_partitions[table_name] = {
                         'partition_fields': partitions.get('partition_fields'),
                         'interval': partitions.get('interval'),
                         'timestamp_field': partitions.get('timestamp_field'),
                     }
                 fields = table_setting.get('fields')
                 if fields:
-                    self.table_fields[table_setting.get('name')] = [f.get("name") for f in fields]
-                    self.table_fields_settings[table_setting.get('name')] = list(fields)
+                    self.table_fields[table_name] = [f.get("name") for f in fields]
+                    self.table_fields_settings[table_name] = list(fields)
+                if table_setting.get('datalake_table_name'):
+                    self.table_datalake_names[table_name] = table_setting.get('datalake_table_name')
+                if table_setting.get('datalake_s3_table'):
+                    self.table_s3_tables[table_name] = table_setting.get('datalake_s3_table')
 
         self.datalake = datalake
         self.db = mysql_database
+
+    def _upload_table_from_file(self, filename, table, field_partitions=None):
+        """Upload a table file using optional datalake/S3 table overrides from settings."""
+        upload_kwargs = {
+            'filename': filename,
+            'table': table,
+            'update_partitions': True,
+        }
+        if field_partitions:
+            upload_kwargs['field_partitions'] = field_partitions
+
+        s3_table = self.table_s3_tables.get(table)
+        if s3_table:
+            upload_kwargs['s3_table'] = s3_table
+            upload_kwargs['s3_filename'] = "{}.csv".format(s3_table)
+
+        datalake_table_name = self.table_datalake_names.get(table)
+        if datalake_table_name:
+            upload_kwargs['datalake_table_name'] = datalake_table_name
+
+        self.datalake.upload_table_from_file(**upload_kwargs)
 
     def test_connections(self) -> dict:
         """
@@ -296,9 +324,7 @@ class MySQLDatasource:
                     for k, v in zip(partition_fields, values):
                         field_partitions[k] = v
 
-                    self.datalake.upload_table_from_file(filename=filename, table=table,
-                                                         field_partitions=field_partitions,
-                                                         update_partitions=True)
+                    self._upload_table_from_file(filename=filename, table=table, field_partitions=field_partitions)
 
                     os.remove(filename)
 
@@ -308,6 +334,6 @@ class MySQLDatasource:
                 rows = self.get_rows(table=table, field_list=fields)
                 save_rows(filename=filename, fields=fields, rows=rows)
 
-                self.datalake.upload_table_from_file(filename=filename, table=table, update_partitions=True)
+                self._upload_table_from_file(filename=filename, table=table)
 
                 os.remove(filename)

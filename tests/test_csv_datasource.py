@@ -60,6 +60,22 @@ def test_extract_and_load_uploads_file():
     }]
 
 
+def test_extract_and_load_uses_configured_s3_table():
+    datalake = FakeDatalake()
+    ds = CSVDatasource(datalake=datalake, datasource_settings={
+        "location": "/data/enrollments.csv",
+        "tables": [{"name": "enrollments", "datalake_s3_table": "clean_enrollments"}],
+    })
+    ds.extract_and_load()
+    assert datalake.uploads == [{
+        "filename": "/data/enrollments.csv",
+        "table": "enrollments",
+        "update_partitions": False,
+        "s3_table": "clean_enrollments",
+        "s3_filename": "clean_enrollments.csv",
+    }]
+
+
 def test_extract_and_load_respects_selected_tables():
     datalake = FakeDatalake()
     ds = CSVDatasource(datalake=datalake, datasource_settings={"location": "/data/enrollments.csv"})

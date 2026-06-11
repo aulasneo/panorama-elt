@@ -116,6 +116,32 @@ def test_extract_and_load_writes_csv_and_uploads(monkeypatch, tmp_path):
     assert not (tmp_path / "Sheet1.csv").exists()
 
 
+def test_extract_and_load_uses_configured_s3_table(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    grid = {
+        (1, 1): "a", (1, 2): None,
+        (2, 1): 1,
+        (3, 1): None,
+    }
+    patch_workbook(monkeypatch, {"Sheet1": grid})
+    datalake = FakeDatalake()
+    ds = XLSDatasource(datalake=datalake, datasource_settings={
+        "location": "/data.xlsx",
+        "tables": [{"name": "Sheet1", "datalake_s3_table": "clean_sheet"}],
+    })
+
+    ds.extract_and_load()
+
+    assert datalake.uploads == [{
+        "filename": "Sheet1.csv",
+        "table": "Sheet1",
+        "update_partitions": True,
+        "s3_table": "clean_sheet",
+        "s3_filename": "clean_sheet.csv",
+    }]
+    assert not (tmp_path / "Sheet1.csv").exists()
+
+
 def test_extract_and_load_skips_unselected_tables(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     patch_workbook(monkeypatch, {"Sheet1": {(1, 1): "a", (1, 2): None}})

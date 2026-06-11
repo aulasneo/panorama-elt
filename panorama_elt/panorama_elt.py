@@ -147,10 +147,15 @@ def _iter_tables(settings, datasource=None, tables=None):
 
 def _datalake_names(table_setting, base_prefix):
     """Return the (table, view) datalake names for a table setting, with defaults."""
-    name = table_setting.get('name')
+    name = table_setting.get('datalake_s3_table') or table_setting.get('name')
     table_name = table_setting.get('datalake_table_name') or "{}_raw_{}".format(base_prefix, name)
     view_name = table_setting.get('datalake_table_view') or "{}_table_{}".format(base_prefix, name)
     return table_name, view_name
+
+
+def _datalake_s3_table(table_setting):
+    """Return the S3 table directory/name for a table setting."""
+    return table_setting.get('datalake_s3_table') or table_setting.get('name')
 
 
 @cli.command(help='Extracts the data from the datasources and uploads to the datalake')
@@ -203,7 +208,7 @@ def _create_datalake_tables(ctx, datasource=None, tables=None):
 
             log.info("Creating or updating datalake table for {}".format(table_setting.get('name')))
             datalake.create_datalake_table(
-                table=table_setting.get('name'),
+                table=_datalake_s3_table(table_setting),
                 fields=fields,
                 field_partitions=partition_fields,
                 datalake_table=datalake_table_name

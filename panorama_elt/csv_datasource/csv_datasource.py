@@ -26,11 +26,18 @@ class CSVDatasource:
 
         table_settings = datasource_settings.get('tables')
         self.table_fields = {}
+        self.table_s3_tables = {}
+        self.table_datalake_names = {}
         if table_settings:
             for table_setting in table_settings:
+                table_name = table_setting.get('name')
                 fields = table_setting.get('fields')
                 if fields:
-                    self.table_fields[table_setting.get('name')] = [f.get("name") for f in fields]
+                    self.table_fields[table_name] = [f.get("name") for f in fields]
+                if table_setting.get('datalake_s3_table'):
+                    self.table_s3_tables[table_name] = table_setting.get('datalake_s3_table')
+                if table_setting.get('datalake_table_name'):
+                    self.table_datalake_names[table_name] = table_setting.get('datalake_table_name')
 
         self.location = datasource_settings.get('location')
         self.datalake = datalake
@@ -94,4 +101,19 @@ class CSVDatasource:
         if selected_tables and table not in selected_tables.split(','):
             return
 
-        self.datalake.upload_table_from_file(filename=self.location, table=table, update_partitions=False)
+        upload_kwargs = {
+            'filename': self.location,
+            'table': table,
+            'update_partitions': False,
+        }
+
+        s3_table = self.table_s3_tables.get(table)
+        if s3_table:
+            upload_kwargs['s3_table'] = s3_table
+            upload_kwargs['s3_filename'] = "{}.csv".format(s3_table)
+
+        datalake_table_name = self.table_datalake_names.get(table)
+        if datalake_table_name:
+            upload_kwargs['datalake_table_name'] = datalake_table_name
+
+        self.datalake.upload_table_from_file(**upload_kwargs)

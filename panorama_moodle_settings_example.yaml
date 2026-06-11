@@ -1,0 +1,1035 @@
+# Example settings for extracting Moodle data from MySQL.
+#
+# Moodle table names below use the default physical table prefix `mdl_`.
+# If your Moodle site uses a different `$CFG->prefix`, update every table name
+# accordingly before running extract-and-load.
+#
+# The core table selection is based on the local_panorama Moodle plugin export
+# list in ../moodle_panorama/classes/athena_initializer.php, with additional
+# common activity and event tables for learning analytics.
+datalake:
+  type: aws
+  panorama_raw_data_bucket: panorama
+  base_prefix: moodle
+  aws_access_key:
+  aws_secret_access_key:
+  aws_region: us-east-1
+  datalake_database: panorama
+  datalake_workgroup: panorama
+  base_partitions:
+  - name: lms
+    type: varchar
+    value: moodle.example.com
+datasources:
+- type: mysql
+  name: moodle_mysql
+  mysql_username:
+  mysql_password:
+  mysql_host:
+  mysql_port: 3306
+  mysql_database: moodle
+  tables:
+  - name: mdl_config
+    datalake_s3_table: config
+    fields:
+    - name: id
+      type: bigint
+    - name: name
+      type: varchar
+    - name: value
+      type: longtext
+  - name: mdl_context
+    datalake_s3_table: context
+    fields:
+    - name: id
+      type: bigint
+    - name: contextlevel
+      type: bigint
+    - name: instanceid
+      type: bigint
+    - name: path
+      type: varchar
+    - name: depth
+      type: tinyint
+    - name: locked
+      type: tinyint
+  - name: mdl_course
+    datalake_s3_table: course
+    fields:
+    - name: id
+      type: bigint
+    - name: category
+      type: bigint
+    - name: sortorder
+      type: bigint
+    - name: fullname
+      type: varchar
+    - name: shortname
+      type: varchar
+    - name: idnumber
+      type: varchar
+    - name: summary
+      type: longtext
+    - name: summaryformat
+      type: tinyint
+    - name: format
+      type: varchar
+    - name: showgrades
+      type: tinyint
+    - name: newsitems
+      type: mediumint
+    - name: startdate
+      type: bigint
+    - name: enddate
+      type: bigint
+    - name: visible
+      type: tinyint
+    - name: visibleold
+      type: tinyint
+    - name: groupmode
+      type: smallint
+    - name: groupmodeforce
+      type: smallint
+    - name: defaultgroupingid
+      type: bigint
+    - name: lang
+      type: varchar
+    - name: theme
+      type: varchar
+    - name: timecreated
+      type: bigint
+    - name: timemodified
+      type: bigint
+  - name: mdl_course_categories
+    datalake_s3_table: course_categories
+    fields:
+    - name: id
+      type: bigint
+    - name: name
+      type: varchar
+    - name: idnumber
+      type: varchar
+    - name: description
+      type: longtext
+    - name: descriptionformat
+      type: tinyint
+    - name: parent
+      type: bigint
+    - name: sortorder
+      type: bigint
+    - name: coursecount
+      type: bigint
+    - name: visible
+      type: tinyint
+    - name: visibleold
+      type: tinyint
+    - name: timemodified
+      type: bigint
+    - name: depth
+      type: bigint
+    - name: path
+      type: varchar
+  - name: mdl_course_completion_criteria
+    datalake_s3_table: course_completion_criteria
+    fields:
+    - name: id
+      type: bigint
+    - name: course
+      type: bigint
+    - name: criteriatype
+      type: bigint
+    - name: module
+      type: varchar
+    - name: moduleinstance
+      type: bigint
+    - name: courseinstance
+      type: bigint
+    - name: enrolperiod
+      type: bigint
+    - name: timeend
+      type: bigint
+    - name: gradepass
+      type: decimal
+    - name: role
+      type: bigint
+  - name: mdl_course_completion_crit_compl
+    datalake_s3_table: course_completion_crit_compl
+    fields:
+    - name: id
+      type: bigint
+    - name: userid
+      type: bigint
+    - name: course
+      type: bigint
+    - name: criteriaid
+      type: bigint
+    - name: gradefinal
+      type: decimal
+    - name: unenroled
+      type: bigint
+    - name: timecompleted
+      type: bigint
+  - name: mdl_course_completions
+    datalake_s3_table: course_completions
+    fields:
+    - name: id
+      type: bigint
+    - name: userid
+      type: bigint
+    - name: course
+      type: bigint
+    - name: timeenrolled
+      type: bigint
+    - name: timestarted
+      type: bigint
+    - name: timecompleted
+      type: bigint
+    - name: reaggregate
+      type: bigint
+  - name: mdl_course_modules
+    datalake_s3_table: course_modules
+    fields:
+    - name: id
+      type: bigint
+    - name: course
+      type: bigint
+    - name: module
+      type: bigint
+    - name: instance
+      type: bigint
+    - name: section
+      type: bigint
+    - name: idnumber
+      type: varchar
+    - name: added
+      type: bigint
+    - name: score
+      type: smallint
+    - name: indent
+      type: mediumint
+    - name: visible
+      type: tinyint
+    - name: visibleoncoursepage
+      type: tinyint
+    - name: visibleold
+      type: tinyint
+    - name: groupmode
+      type: smallint
+    - name: groupingid
+      type: bigint
+    - name: completion
+      type: tinyint
+    - name: completiongradeitemnumber
+      type: bigint
+    - name: completionview
+      type: tinyint
+    - name: completionexpected
+      type: bigint
+    - name: showdescription
+      type: tinyint
+    - name: availability
+      type: longtext
+    - name: deletioninprogress
+      type: tinyint
+  - name: mdl_modules
+    datalake_s3_table: modules
+    fields:
+    - name: id
+      type: bigint
+    - name: name
+      type: varchar
+    - name: cron
+      type: bigint
+    - name: lastcron
+      type: bigint
+    - name: search
+      type: varchar
+    - name: visible
+      type: tinyint
+  - name: mdl_enrol
+    datalake_s3_table: enrol
+    fields:
+    - name: id
+      type: bigint
+    - name: enrol
+      type: varchar
+    - name: status
+      type: bigint
+    - name: courseid
+      type: bigint
+    - name: sortorder
+      type: bigint
+    - name: name
+      type: varchar
+    - name: enrolperiod
+      type: bigint
+    - name: enrolstartdate
+      type: bigint
+    - name: enrolenddate
+      type: bigint
+    - name: expirynotify
+      type: tinyint
+    - name: expirythreshold
+      type: bigint
+    - name: notifyall
+      type: tinyint
+    - name: roleid
+      type: bigint
+    - name: customint1
+      type: bigint
+    - name: customint2
+      type: bigint
+    - name: customint3
+      type: bigint
+    - name: customint4
+      type: bigint
+    - name: customint5
+      type: bigint
+    - name: customint6
+      type: bigint
+    - name: customint7
+      type: bigint
+    - name: customint8
+      type: bigint
+    - name: customchar1
+      type: varchar
+    - name: customchar2
+      type: varchar
+    - name: customchar3
+      type: varchar
+    - name: customdec1
+      type: decimal
+    - name: customdec2
+      type: decimal
+    - name: customtext1
+      type: longtext
+    - name: customtext2
+      type: longtext
+    - name: customtext3
+      type: longtext
+    - name: customtext4
+      type: longtext
+    - name: timecreated
+      type: bigint
+    - name: timemodified
+      type: bigint
+  - name: mdl_grade_categories
+    datalake_s3_table: grade_categories
+    fields:
+    - name: id
+      type: bigint
+    - name: courseid
+      type: bigint
+    - name: parent
+      type: bigint
+    - name: depth
+      type: bigint
+    - name: path
+      type: varchar
+    - name: fullname
+      type: varchar
+    - name: aggregation
+      type: bigint
+    - name: keephigh
+      type: bigint
+    - name: droplow
+      type: bigint
+    - name: aggregateonlygraded
+      type: tinyint
+    - name: aggregateoutcomes
+      type: tinyint
+    - name: timecreated
+      type: bigint
+    - name: timemodified
+      type: bigint
+  - name: mdl_grade_grades
+    datalake_s3_table: grade_grades
+    fields:
+    - name: id
+      type: bigint
+    - name: itemid
+      type: bigint
+    - name: userid
+      type: bigint
+    - name: rawgrade
+      type: decimal
+    - name: rawgrademax
+      type: decimal
+    - name: rawgrademin
+      type: decimal
+    - name: rawscaleid
+      type: bigint
+    - name: usermodified
+      type: bigint
+    - name: finalgrade
+      type: decimal
+    - name: hidden
+      type: bigint
+    - name: locked
+      type: bigint
+    - name: locktime
+      type: bigint
+    - name: exported
+      type: bigint
+    - name: overridden
+      type: bigint
+    - name: excluded
+      type: bigint
+    - name: feedback
+      type: longtext
+    - name: feedbackformat
+      type: bigint
+    - name: information
+      type: longtext
+    - name: informationformat
+      type: bigint
+    - name: timecreated
+      type: bigint
+    - name: timemodified
+      type: bigint
+    partitions:
+      interval: 2 hour
+      timestamp_field: timemodified
+      partition_fields:
+      - userid
+  - name: mdl_grade_items
+    datalake_s3_table: grade_items
+    fields:
+    - name: id
+      type: bigint
+    - name: courseid
+      type: bigint
+    - name: categoryid
+      type: bigint
+    - name: itemname
+      type: varchar
+    - name: itemtype
+      type: varchar
+    - name: itemmodule
+      type: varchar
+    - name: iteminstance
+      type: bigint
+    - name: itemnumber
+      type: bigint
+    - name: iteminfo
+      type: longtext
+    - name: idnumber
+      type: varchar
+    - name: calculation
+      type: longtext
+    - name: gradetype
+      type: smallint
+    - name: grademax
+      type: decimal
+    - name: grademin
+      type: decimal
+    - name: scaleid
+      type: bigint
+    - name: outcomeid
+      type: bigint
+    - name: gradepass
+      type: decimal
+    - name: multfactor
+      type: decimal
+    - name: plusfactor
+      type: decimal
+    - name: aggregationcoef
+      type: decimal
+    - name: aggregationcoef2
+      type: decimal
+    - name: sortorder
+      type: bigint
+    - name: display
+      type: bigint
+    - name: decimals
+      type: tinyint
+    - name: hidden
+      type: bigint
+    - name: locked
+      type: bigint
+    - name: locktime
+      type: bigint
+    - name: needsupdate
+      type: bigint
+    - name: weightoverride
+      type: tinyint
+    - name: timecreated
+      type: bigint
+    - name: timemodified
+      type: bigint
+  - name: mdl_groups
+    datalake_s3_table: groups
+    fields:
+    - name: id
+      type: bigint
+    - name: courseid
+      type: bigint
+    - name: idnumber
+      type: varchar
+    - name: name
+      type: varchar
+    - name: description
+      type: longtext
+    - name: descriptionformat
+      type: tinyint
+    - name: enrolmentkey
+      type: varchar
+    - name: picture
+      type: bigint
+    - name: timecreated
+      type: bigint
+    - name: timemodified
+      type: bigint
+  - name: mdl_groups_members
+    datalake_s3_table: groups_members
+    fields:
+    - name: id
+      type: bigint
+    - name: groupid
+      type: bigint
+    - name: userid
+      type: bigint
+    - name: timeadded
+      type: bigint
+    - name: component
+      type: varchar
+    - name: itemid
+      type: bigint
+  - name: mdl_role
+    datalake_s3_table: role
+    fields:
+    - name: id
+      type: bigint
+    - name: name
+      type: varchar
+    - name: shortname
+      type: varchar
+    - name: description
+      type: longtext
+    - name: sortorder
+      type: bigint
+    - name: archetype
+      type: varchar
+  - name: mdl_role_assignments
+    datalake_s3_table: role_assignments
+    fields:
+    - name: id
+      type: bigint
+    - name: roleid
+      type: bigint
+    - name: contextid
+      type: bigint
+    - name: userid
+      type: bigint
+    - name: timemodified
+      type: bigint
+    - name: modifierid
+      type: bigint
+    - name: component
+      type: varchar
+    - name: itemid
+      type: bigint
+    - name: sortorder
+      type: bigint
+  - name: mdl_user
+    datalake_s3_table: user
+    fields:
+    - name: id
+      type: bigint
+    - name: auth
+      type: varchar
+    - name: confirmed
+      type: tinyint
+    - name: policyagreed
+      type: tinyint
+    - name: deleted
+      type: tinyint
+    - name: suspended
+      type: tinyint
+    - name: mnethostid
+      type: bigint
+    - name: username
+      type: varchar
+    - name: idnumber
+      type: varchar
+    - name: firstname
+      type: varchar
+    - name: lastname
+      type: varchar
+    - name: email
+      type: varchar
+    - name: emailstop
+      type: tinyint
+    - name: phone1
+      type: varchar
+    - name: phone2
+      type: varchar
+    - name: institution
+      type: varchar
+    - name: department
+      type: varchar
+    - name: address
+      type: varchar
+    - name: city
+      type: varchar
+    - name: country
+      type: varchar
+    - name: lang
+      type: varchar
+    - name: calendartype
+      type: varchar
+    - name: timezone
+      type: varchar
+    - name: firstaccess
+      type: bigint
+    - name: lastaccess
+      type: bigint
+    - name: lastlogin
+      type: bigint
+    - name: currentlogin
+      type: bigint
+    - name: lastip
+      type: varchar
+    - name: secret
+      type: varchar
+    - name: picture
+      type: bigint
+    - name: description
+      type: longtext
+    - name: descriptionformat
+      type: tinyint
+    - name: mailformat
+      type: tinyint
+    - name: maildigest
+      type: tinyint
+    - name: maildisplay
+      type: tinyint
+    - name: autosubscribe
+      type: tinyint
+    - name: trackforums
+      type: tinyint
+    - name: timecreated
+      type: bigint
+    - name: timemodified
+      type: bigint
+  - name: mdl_user_enrolments
+    datalake_s3_table: user_enrolments
+    fields:
+    - name: id
+      type: bigint
+    - name: status
+      type: bigint
+    - name: enrolid
+      type: bigint
+    - name: userid
+      type: bigint
+    - name: timestart
+      type: bigint
+    - name: timeend
+      type: bigint
+    - name: modifierid
+      type: bigint
+    - name: timecreated
+      type: bigint
+    - name: timemodified
+      type: bigint
+  - name: mdl_user_info_data
+    datalake_s3_table: user_info_data
+    fields:
+    - name: id
+      type: bigint
+    - name: userid
+      type: bigint
+    - name: fieldid
+      type: bigint
+    - name: data
+      type: longtext
+    - name: dataformat
+      type: tinyint
+  - name: mdl_user_info_field
+    datalake_s3_table: user_info_field
+    fields:
+    - name: id
+      type: bigint
+    - name: shortname
+      type: varchar
+    - name: name
+      type: longtext
+    - name: datatype
+      type: varchar
+    - name: description
+      type: longtext
+    - name: descriptionformat
+      type: tinyint
+    - name: categoryid
+      type: bigint
+    - name: sortorder
+      type: bigint
+    - name: required
+      type: tinyint
+    - name: locked
+      type: tinyint
+    - name: visible
+      type: smallint
+    - name: forceunique
+      type: tinyint
+    - name: signup
+      type: tinyint
+    - name: defaultdata
+      type: longtext
+    - name: defaultdataformat
+      type: tinyint
+    - name: param1
+      type: longtext
+    - name: param2
+      type: longtext
+    - name: param3
+      type: longtext
+    - name: param4
+      type: longtext
+    - name: param5
+      type: longtext
+  - name: mdl_user_lastaccess
+    datalake_s3_table: user_lastaccess
+    fields:
+    - name: id
+      type: bigint
+    - name: userid
+      type: bigint
+    - name: courseid
+      type: bigint
+    - name: timeaccess
+      type: bigint
+  - name: mdl_user_preferences
+    datalake_s3_table: user_preferences
+    fields:
+    - name: id
+      type: bigint
+    - name: userid
+      type: bigint
+    - name: name
+      type: varchar
+    - name: value
+      type: varchar
+  - name: mdl_logstore_standard_log
+    datalake_s3_table: logstore_standard_log
+    fields:
+    - name: id
+      type: bigint
+    - name: eventname
+      type: varchar
+    - name: component
+      type: varchar
+    - name: action
+      type: varchar
+    - name: target
+      type: varchar
+    - name: objecttable
+      type: varchar
+    - name: objectid
+      type: bigint
+    - name: crud
+      type: varchar
+    - name: edulevel
+      type: tinyint
+    - name: contextid
+      type: bigint
+    - name: contextlevel
+      type: bigint
+    - name: contextinstanceid
+      type: bigint
+    - name: userid
+      type: bigint
+    - name: courseid
+      type: bigint
+    - name: relateduserid
+      type: bigint
+    - name: anonymous
+      type: tinyint
+    - name: other
+      type: longtext
+    - name: timecreated
+      type: bigint
+    - name: origin
+      type: varchar
+    - name: ip
+      type: varchar
+    - name: realuserid
+      type: bigint
+    partitions:
+      interval: 2 hour
+      timestamp_field: timecreated
+      partition_fields:
+      - courseid
+  - name: mdl_assign
+    datalake_s3_table: assign
+    fields:
+    - name: id
+      type: bigint
+    - name: course
+      type: bigint
+    - name: name
+      type: varchar
+    - name: intro
+      type: longtext
+    - name: introformat
+      type: smallint
+    - name: alwaysshowdescription
+      type: tinyint
+    - name: nosubmissions
+      type: tinyint
+    - name: submissiondrafts
+      type: tinyint
+    - name: sendnotifications
+      type: tinyint
+    - name: sendlatenotifications
+      type: tinyint
+    - name: duedate
+      type: bigint
+    - name: allowsubmissionsfromdate
+      type: bigint
+    - name: grade
+      type: bigint
+    - name: timemodified
+      type: bigint
+    - name: completionsubmit
+      type: tinyint
+    - name: cutoffdate
+      type: bigint
+    - name: gradingduedate
+      type: bigint
+    - name: teamsubmission
+      type: tinyint
+    - name: requireallteammemberssubmit
+      type: tinyint
+    - name: blindmarking
+      type: tinyint
+    - name: attemptreopenmethod
+      type: varchar
+    - name: maxattempts
+      type: mediumint
+  - name: mdl_assign_submission
+    datalake_s3_table: assign_submission
+    fields:
+    - name: id
+      type: bigint
+    - name: assignment
+      type: bigint
+    - name: userid
+      type: bigint
+    - name: timecreated
+      type: bigint
+    - name: timemodified
+      type: bigint
+    - name: status
+      type: varchar
+    - name: groupid
+      type: bigint
+    - name: attemptnumber
+      type: bigint
+    - name: latest
+      type: tinyint
+    partitions:
+      interval: 2 hour
+      timestamp_field: timemodified
+      partition_fields:
+      - assignment
+  - name: mdl_forum
+    datalake_s3_table: forum
+    fields:
+    - name: id
+      type: bigint
+    - name: course
+      type: bigint
+    - name: type
+      type: varchar
+    - name: name
+      type: varchar
+    - name: intro
+      type: longtext
+    - name: introformat
+      type: smallint
+    - name: assessed
+      type: bigint
+    - name: assesstimestart
+      type: bigint
+    - name: assesstimefinish
+      type: bigint
+    - name: scale
+      type: bigint
+    - name: maxbytes
+      type: bigint
+    - name: maxattachments
+      type: bigint
+    - name: forcesubscribe
+      type: tinyint
+    - name: trackingtype
+      type: tinyint
+    - name: rsstype
+      type: tinyint
+    - name: rssarticles
+      type: tinyint
+    - name: timemodified
+      type: bigint
+    - name: warnafter
+      type: bigint
+    - name: blockafter
+      type: bigint
+    - name: blockperiod
+      type: bigint
+    - name: completiondiscussions
+      type: bigint
+    - name: completionreplies
+      type: bigint
+    - name: completionposts
+      type: bigint
+  - name: mdl_forum_discussions
+    datalake_s3_table: forum_discussions
+    fields:
+    - name: id
+      type: bigint
+    - name: course
+      type: bigint
+    - name: forum
+      type: bigint
+    - name: name
+      type: varchar
+    - name: firstpost
+      type: bigint
+    - name: userid
+      type: bigint
+    - name: groupid
+      type: bigint
+    - name: assessed
+      type: tinyint
+    - name: timemodified
+      type: bigint
+    - name: usermodified
+      type: bigint
+    - name: timestart
+      type: bigint
+    - name: timeend
+      type: bigint
+  - name: mdl_forum_posts
+    datalake_s3_table: forum_posts
+    fields:
+    - name: id
+      type: bigint
+    - name: discussion
+      type: bigint
+    - name: parent
+      type: bigint
+    - name: userid
+      type: bigint
+    - name: created
+      type: bigint
+    - name: modified
+      type: bigint
+    - name: mailed
+      type: tinyint
+    - name: subject
+      type: varchar
+    - name: message
+      type: longtext
+    - name: messageformat
+      type: tinyint
+    - name: messagetrust
+      type: tinyint
+    - name: attachment
+      type: varchar
+    - name: totalscore
+      type: smallint
+    - name: mailnow
+      type: bigint
+  - name: mdl_quiz
+    datalake_s3_table: quiz
+    fields:
+    - name: id
+      type: bigint
+    - name: course
+      type: bigint
+    - name: name
+      type: varchar
+    - name: intro
+      type: longtext
+    - name: introformat
+      type: smallint
+    - name: timeopen
+      type: bigint
+    - name: timeclose
+      type: bigint
+    - name: timelimit
+      type: bigint
+    - name: preferredbehaviour
+      type: varchar
+    - name: attempts
+      type: mediumint
+    - name: attemptonlast
+      type: smallint
+    - name: grademethod
+      type: smallint
+    - name: decimalpoints
+      type: smallint
+    - name: questiondecimalpoints
+      type: smallint
+    - name: reviewattempt
+      type: mediumint
+    - name: reviewcorrectness
+      type: mediumint
+    - name: reviewmarks
+      type: mediumint
+    - name: reviewspecificfeedback
+      type: mediumint
+    - name: reviewgeneralfeedback
+      type: mediumint
+    - name: reviewrightanswer
+      type: mediumint
+    - name: reviewoverallfeedback
+      type: mediumint
+    - name: questionsperpage
+      type: bigint
+    - name: navmethod
+      type: varchar
+    - name: shuffleanswers
+      type: smallint
+    - name: sumgrades
+      type: decimal
+    - name: grade
+      type: decimal
+    - name: timecreated
+      type: bigint
+    - name: timemodified
+      type: bigint
+  - name: mdl_quiz_attempts
+    datalake_s3_table: quiz_attempts
+    fields:
+    - name: id
+      type: bigint
+    - name: quiz
+      type: bigint
+    - name: userid
+      type: bigint
+    - name: attempt
+      type: mediumint
+    - name: uniqueid
+      type: bigint
+    - name: layout
+      type: longtext
+    - name: currentpage
+      type: bigint
+    - name: preview
+      type: tinyint
+    - name: state
+      type: varchar
+    - name: timestart
+      type: bigint
+    - name: timefinish
+      type: bigint
+    - name: timemodified
+      type: bigint
+    - name: timemodifiedoffline
+      type: bigint
+    - name: timecheckstate
+      type: bigint
+    - name: sumgrades
+      type: decimal

@@ -147,6 +147,29 @@ def test_extract_and_load_without_partitions(monkeypatch, tmp_path):
     assert not (tmp_path / "users.csv").exists()
 
 
+def test_extract_and_load_uses_configured_s3_table(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    settings = {"tables": [{
+        "name": "mdl_course",
+        "datalake_s3_table": "course",
+        "fields": [{"name": "id"}, {"name": "fullname"}],
+    }]}
+    cursor = FakeCursor(results=[[(1, "Course")]])
+    ds = make_datasource(monkeypatch, settings, cursor)
+
+    ds.extract_and_load()
+
+    assert "from mdl_course" in cursor.queries[0]
+    assert ds.datalake.uploads == [{
+        "filename": "mdl_course.csv",
+        "table": "mdl_course",
+        "update_partitions": True,
+        "s3_table": "course",
+        "s3_filename": "course.csv",
+    }]
+    assert not (tmp_path / "mdl_course.csv").exists()
+
+
 def test_extract_and_load_skips_unselected_tables(monkeypatch):
     settings = {"tables": [{"name": "users", "fields": [{"name": "id"}]}]}
     cursor = FakeCursor()

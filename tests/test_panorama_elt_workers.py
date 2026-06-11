@@ -137,6 +137,11 @@ def test_datalake_names_overrides():
     assert panorama_elt._datalake_names(table, "panorama") == ("X", "Y")
 
 
+def test_datalake_names_default_to_s3_table_name():
+    table = {"name": "mdl_course", "datalake_s3_table": "course"}
+    assert panorama_elt._datalake_names(table, "moodle") == ("moodle_raw_course", "moodle_table_course")
+
+
 # --- workers ---------------------------------------------------------------
 
 def test_create_datalake_tables_builds_each_and_skips_fieldless():
@@ -154,6 +159,22 @@ def test_create_datalake_tables_builds_each_and_skips_fieldless():
         "fields": ["id", "email"],
         "field_partitions": ["email"],
         "datalake_table": "panorama_raw_users",
+    }]
+
+
+def test_create_datalake_tables_uses_s3_table_for_location_and_default_name():
+    settings = {"datalake": {"base_prefix": "moodle"}, "datasources": [
+        {"name": "a", "tables": [
+            {"name": "mdl_course", "datalake_s3_table": "course", "fields": [{"name": "id"}]},
+        ]},
+    ]}
+    dl = FakeDatalake()
+    panorama_elt._create_datalake_tables(make_ctx(settings, dl))
+    assert dl.created == [{
+        "table": "course",
+        "fields": ["id"],
+        "field_partitions": None,
+        "datalake_table": "moodle_raw_course",
     }]
 
 
