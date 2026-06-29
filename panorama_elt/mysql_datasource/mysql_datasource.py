@@ -253,6 +253,78 @@ class MySQLDatasource:
 
         return rows
 
+    def _extract_and_load_table(self, table: str, force: bool = False):
+        """Extract and upload one configured table."""
+        fields = self.get_fields(table=table)
+
+        filename = "{}.csv".format(table)
+
+        partitions = self.field_partitions.get(table)
+        if partitions:
+
+            # Process tables with partitions
+            partition_fields = partitions.get('partition_fields')
+            timestamp_field = partitions.get('timestamp_field')
+
+            for partition_field in partition_fields:
+                fields.remove(partition_field)
+
+            # If there is an interval configured for the table, we do an incremental update.
+            # Incremental updates work with partitions. We first query which partitions have records with changes in
+            # the last interval configured. Then the full partition is updated.
+            update_interval = partitions.get('interval')
+            interval = None
+            if update_interval:
+
+                if force:
+                    interval = None
+                    log.info("Forcing a full dump")
+                else:
+                    # interval will be used in a where clause to query all the partitions with changes
+                    interval = "{} >= date_sub(now(), interval {})".format(timestamp_field, update_interval)
+                    log.debug("Doing incremental update of the last {}".format(update_interval))
+
+            # Get a list of all distinct partition field values in the recordset within the last increment period
+            values_list = self.get_rows(table=table, field_list=partition_fields, distinct=True, where=interval)
+            log.info("{} partitions found to update".format(len(values_list)))
+
+            # Now we need to make one query for each set of values representing partitions, with changes in the
+            # last period.
+            counter = 1
+            for values in values_list:
+
+                # Create a filter to match all partition fields with the values with changes in the interval
+                where_clauses = []
+                for partition_field, value in zip(partition_fields, values):
+                    where_clauses.append("{} = '{}'".format(partition_field, value))
+                where_clause = " and ".join(where_clauses)
+
+                log.info("Getting partition {}/{}".format(counter, len(values_list)))
+                counter += 1
+
+                # Query mysql table
+                rows = self.get_rows(table=table, field_list=fields, where=where_clause)
+
+                save_rows(filename=filename, fields=fields, rows=rows)
+
+                field_partitions = {}
+                for k, v in zip(partition_fields, values):
+                    field_partitions[k] = v
+
+                self._upload_table_from_file(filename=filename, table=table, field_partitions=field_partitions)
+
+                os.remove(filename)
+
+        else:
+
+            # Process tables without field partitions
+            rows = self.get_rows(table=table, field_list=fields)
+            save_rows(filename=filename, fields=fields, rows=rows)
+
+            self._upload_table_from_file(filename=filename, table=table)
+
+            os.remove(filename)
+
     def extract_and_load(self, selected_tables: str = None, force: bool = False):
         """
         Extracts mysql tables and sends them to the datalake
@@ -268,72 +340,10 @@ class MySQLDatasource:
 
             log.info("Extracting {}".format(table))
 
-            fields = self.get_fields(table=table)
-
-            filename = "{}.csv".format(table)
-
-            partitions = self.field_partitions.get(table)
-            if partitions:
-
-                # Process tables with partitions
-                partition_fields = partitions.get('partition_fields')
-                timestamp_field = partitions.get('timestamp_field')
-
-                for partition_field in partition_fields:
-                    fields.remove(partition_field)
-
-                # If there is an interval configured for the table, we do an incremental update.
-                # Incremental updates work with partitions. We first query which partitions have records with changes in
-                # the last interval configured. Then the full partition is updated.
-                update_interval = partitions.get('interval')
-                interval = None
-                if update_interval:
-
-                    if force:
-                        interval = None
-                        log.info("Forcing a full dump")
-                    else:
-                        # interval will be used in a where clause to query all the partitions with changes
-                        interval = "{} >= date_sub(now(), interval {})".format(timestamp_field, update_interval)
-                        log.debug("Doing incremental update of the last {}".format(update_interval))
-
-                # Get a list of all distinct partition field values in the recordset within the last increment period
-                values_list = self.get_rows(table=table, field_list=partition_fields, distinct=True, where=interval)
-                log.info("{} partitions found to update".format(len(values_list)))
-
-                # Now we need to make one query for each set of values representing partitions, with changes in the
-                # last period.
-                counter = 1
-                for values in values_list:
-
-                    # Create a filter to match all partition fields with the values with changes in the interval
-                    where_clauses = []
-                    for partition_field, value in zip(partition_fields, values):
-                        where_clauses.append("{} = '{}'".format(partition_field, value))
-                    where_clause = " and ".join(where_clauses)
-
-                    log.info("Getting partition {}/{}".format(counter, len(values_list)))
-                    counter += 1
-
-                    # Query mysql table
-                    rows = self.get_rows(table=table, field_list=fields, where=where_clause)
-
-                    save_rows(filename=filename, fields=fields, rows=rows)
-
-                    field_partitions = {}
-                    for k, v in zip(partition_fields, values):
-                        field_partitions[k] = v
-
-                    self._upload_table_from_file(filename=filename, table=table, field_partitions=field_partitions)
-
+            try:
+                self._extract_and_load_table(table=table, force=force)
+            except pymysql.err.MySQLError as e:
+                log.error("Skipping table '{}' after MySQL error: {}".format(table, e))
+                filename = "{}.csv".format(table)
+                if os.path.exists(filename):
                     os.remove(filename)
-
-            else:
-
-                # Process tables without field partitions
-                rows = self.get_rows(table=table, field_list=fields)
-                save_rows(filename=filename, fields=fields, rows=rows)
-
-                self._upload_table_from_file(filename=filename, table=table)
-
-                os.remove(filename)

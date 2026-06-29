@@ -20,6 +20,20 @@ class FakeCursor:
         return self.results.pop(0) if self.results else []
 
 
+class ErrorOnceCursor(FakeCursor):
+    """Raises a MySQL error on the first query, then behaves like FakeCursor."""
+
+    def __init__(self, results=None):
+        super().__init__(results=results)
+        self.raise_next = True
+
+    def execute(self, query):
+        if self.raise_next:
+            self.raise_next = False
+            raise pymysql.err.ProgrammingError("missing table")
+        super().execute(query)
+
+
 class FakeDatalake:
     def __init__(self):
         self.uploads = []
@@ -176,6 +190,26 @@ def test_extract_and_load_skips_unselected_tables(monkeypatch):
     ds = make_datasource(monkeypatch, settings, cursor)
     ds.extract_and_load(selected_tables="other")
     assert ds.datalake.uploads == []
+
+
+def test_extract_and_load_logs_mysql_errors_and_continues(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    settings = {"tables": [
+        {"name": "missing", "fields": [{"name": "id"}]},
+        {"name": "users", "fields": [{"name": "id"}, {"name": "email"}]},
+    ]}
+    cursor = ErrorOnceCursor(results=[[(1, "a@x.com")]])
+    ds = make_datasource(monkeypatch, settings, cursor)
+
+    ds.extract_and_load()
+
+    assert ds.datalake.uploads == [{
+        "filename": "users.csv",
+        "table": "users",
+        "update_partitions": True,
+    }]
+    assert not (tmp_path / "missing.csv").exists()
+    assert not (tmp_path / "users.csv").exists()
 
 
 def test_extract_and_load_with_partitions(monkeypatch, tmp_path):

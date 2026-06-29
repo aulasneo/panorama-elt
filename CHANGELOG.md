@@ -1,5 +1,9 @@
 # Change log
 
+## Unreleased
+
+feat: run resiliently if a table does not exist
+
 ## Version 1.0.0 (2026-06-04)
 feat: Refactored CLI to simplify code
 feat: Added unit, quality and coverage tests
