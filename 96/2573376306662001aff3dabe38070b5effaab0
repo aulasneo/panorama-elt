@@ -1,0 +1,26 @@
+requirements.txt
+  s_ce546a8a6ec5b4::t_81e3ea4f50ced1 18
+CHANGELOG.md
+  s_ce546a8a6ec5b4::t_4df473636becc4 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "962573376306662001aff3dabe38070b5effaab0",
+  "prompts": {},
+  "humans": {
+    "h_67430f944e00e2": {
+      "author": "Andrés González <andres@aulasneo.com>"
+    }
+  },
+  "sessions": {
+    "s_ce546a8a6ec5b4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f1400-67c2-76c0-9a79-99f95a8f1c68",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Andrés González <andres@aulasneo.com>"
+    }
+  }
+}
