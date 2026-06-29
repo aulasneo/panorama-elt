@@ -15,7 +15,7 @@ cffi==2.0.0
     # via cryptography
 click==8.4.1
     # via -r requirements.in
-cryptography==48.0.0
+cryptography==48.0.1
     # via -r requirements.in
 dnspython==2.8.0
     # via pymongo

@@ -3,6 +3,7 @@
 ## Unreleased
 
 feat: run resiliently if a table does not exist
+fix: update cryptography to 48.0.1 to address Dependabot security alert
 
 ## Version 1.0.0 (2026-06-04)
 feat: Refactored CLI to simplify code
