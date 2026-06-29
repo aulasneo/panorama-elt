@@ -1,0 +1,29 @@
+panorama_elt/mysql_datasource/mysql_datasource.py
+  s_5bccef2070067e::t_93e50c1c6e1038 256-327,343-348
+CHANGELOG.md
+  h_67430f944e00e2 3-6
+tests/test_mysql_datasource.py
+  s_5bccef2070067e::t_bc167ace22d92c 23-36,195-212
+  s_5bccef2070067e::t_8815d7dd06a5c6 213-214
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "cf62ae72f2b7acd8bd8d281a08cf38d1023320f8",
+  "prompts": {},
+  "humans": {
+    "h_67430f944e00e2": {
+      "author": "Andrés González <andres@aulasneo.com>"
+    }
+  },
+  "sessions": {
+    "s_5bccef2070067e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f13b2-469b-70a3-bf32-9621bb486779",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Andrés González <andres@aulasneo.com>"
+    }
+  }
+}
