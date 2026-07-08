@@ -1,6 +1,6 @@
 # Change log
 
-## Unreleased
+## Version 1.0.1 (2026-07-08)
 
 feat: run resiliently if a table does not exist
 fix: update cryptography to 48.0.1 to address Dependabot security alert
