@@ -4,13 +4,27 @@ Utility class to manage aws datalake for Panorama analytics
 import sys
 import time
 import urllib.parse
+import re
 from uuid import uuid4
 
 import boto3
 import botocore
 from botocore.exceptions import ClientError
+from botocore.config import Config
 
 from panorama_elt.panorama_logger.setup_logger import log
+
+
+def partition_value(value):
+    """Normalize partition scalars while retaining existing string paths."""
+    return '__HIVE_DEFAULT_PARTITION__' if value is None else str(value)
+
+
+def identifier(value):
+    """Only allow configured identifier names, never SQL expressions."""
+    if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', value):
+        raise ValueError(f'Invalid SQL identifier: {value!r}')
+    return value
 
 
 class PanoramaDatalake:
@@ -54,8 +68,11 @@ class PanoramaDatalake:
             log.debug("Creating boto3 session without access key")
             session = boto3.Session(region_name=datalake_settings.get('aws_region', 'us-east-1'))
 
-        self.s3_client = session.client('s3')
-        self.athena = session.client('athena', region_name=datalake_settings.get('aws_region', 'us-east-1'))
+        config = Config(connect_timeout=10, read_timeout=30,
+                        retries={'mode': 'standard', 'total_max_attempts': 3})
+        self.s3_client = session.client('s3', config=config)
+        self.athena = session.client('athena', config=config,
+                                     region_name=datalake_settings.get('aws_region', 'us-east-1'))
 
         self.datalake_db = datalake_settings.get('datalake_database')
         self.datalake_workgroup = datalake_settings.get('datalake_workgroup')
@@ -114,7 +131,7 @@ class PanoramaDatalake:
 
         if not self.datalake_db or not self.datalake_workgroup:
             log.warning("Datalake db or workgroup not configured. Skipping datalake update.")
-            return
+            raise ValueError('Datalake database and workgroup are required for partition updates')
 
         crt = str(uuid4())
         log.debug("Executing {}".format(query))
@@ -132,25 +149,29 @@ class PanoramaDatalake:
         except ClientError as e:
             log.error("boto3 error trying to execute athena query {}".format(query))
             log.error(e)
-            return
+            raise
 
     def get_athena_query_execution(self, execution):
         """Return the execution state of an Athena query given its execution descriptor."""
         execution_id = execution.get('QueryExecutionId')
         try:
             response = self.athena.get_query_execution(QueryExecutionId=execution_id)
-            state = response.get('QueryExecution').get('Status').get('State')
+            status = response['QueryExecution']['Status']
+            state = status['State']
+            execution['StateChangeReason'] = status.get('StateChangeReason', '')
             return state
 
         except ClientError as e:
             log.error(e)
-            sys.exit(1)
+            raise
 
     def get_athena_executions(self, max_iter: int = 20):
         """
         Show the results of all athena executions
         :return: None
         """
+        if max_iter < 1:
+            raise ValueError('Athena polling requires at least one attempt')
         results = {}
         i = max_iter
         while ('RUNNING' in results or 'QUEUED' in results or i == max_iter) and i > 0:
@@ -162,10 +183,16 @@ class PanoramaDatalake:
                     results[result] = 1
                 else:
                     results[result] += 1
-            time.sleep(1)
+            if i > 0 and ('RUNNING' in results or 'QUEUED' in results):
+                time.sleep(1)
 
             log.debug("Summary of athena executions: {}".format(results))
 
+        unsuccessful = {state: count for state, count in results.items() if state != 'SUCCEEDED'}
+        if unsuccessful:
+            reasons = '; '.join(f"{item['QueryExecutionId']}: {item.get('StateChangeReason', '')}"
+                                for item in self.executions)
+            raise RuntimeError(f'Athena queries incomplete after {max_iter} polls: {unsuccessful}; {reasons}')
         return results
 
     def update_partitions(self, table, field_partitions: iter = None, datalake_table_name: str = None):
@@ -183,12 +210,14 @@ class PanoramaDatalake:
         partitions_uri = []
         if self.base_partitions:
             for partition_field, value in self.base_partitions.items():
-                partitions.append("{} = '{}'".format(partition_field, value))
+                value = partition_value(value)
+                partitions.append("{} = '{}'".format(identifier(partition_field), value.replace("'", "''")))
                 partitions_uri.append("{}={}".format(partition_field, urllib.parse.quote(value)))
 
         if field_partitions:
             for partition_field, value in field_partitions.items():
-                partitions.append("{} = '{}'".format(partition_field, value))
+                value = partition_value(value)
+                partitions.append("{} = '{}'".format(identifier(partition_field), value.replace("'", "''")))
                 partitions_uri.append("{}={}".format(partition_field, urllib.parse.quote(value)))
 
         partitions_clause = ','.join(partitions)
@@ -206,9 +235,9 @@ class PanoramaDatalake:
 
         log.info("Updating partitions of {}".format(datalake_table_name))
         query = "ALTER TABLE {} ADD IF NOT EXISTS PARTITION ({}) LOCATION '{}'".format(
-            datalake_table_name,
+            identifier(datalake_table_name),
             partitions_clause,
-            location
+            location.replace("'", "''")
         )
 
         log.debug("Updating partitions with {}".format(query))
@@ -249,11 +278,11 @@ class PanoramaDatalake:
 
         if self.base_partitions:
             for key, value in self.base_partitions.items():
-                prefix_list.append("{}={}".format(key, urllib.parse.quote(value)))
+                prefix_list.append("{}={}".format(key, urllib.parse.quote(partition_value(value))))
 
         if field_partitions:
             for key, value in field_partitions.items():
-                prefix_list.append("{}={}".format(key, urllib.parse.quote(value)))
+                prefix_list.append("{}={}".format(key, urllib.parse.quote(partition_value(value))))
 
         prefix_list.append(s3_filename)
 
@@ -284,6 +313,10 @@ class PanoramaDatalake:
         if not datalake_table:
             datalake_table = "{base_prefix}_raw_{table}".format(base_prefix=self.base_prefix, table=table)
 
+        fields = list(fields)
+        identifier(datalake_table)
+        for field in fields + list(field_partitions or []) + list(self.base_partitions):
+            identifier(field)
         # Remove partition fields from the field list
         if field_partitions:
             for partition_field in field_partitions:
@@ -351,7 +384,7 @@ class PanoramaDatalake:
             datalake_table=datalake_table,
             fields_definitions=fields_definitions,
             partitions_section=partitions_section,
-            location=location
+            location=location.replace("'", "''")
         )
 
         log.debug("Creating datalake table {} with {}".format(table, query))
@@ -364,6 +397,7 @@ class PanoramaDatalake:
         :return:
         """
 
+        identifier(datalake_table)
         query = """
             DROP TABLE `{datalake_table}`
             """.format(datalake_table=datalake_table)
@@ -376,6 +410,7 @@ class PanoramaDatalake:
         :return:
         """
 
+        identifier(view)
         query = """
             DROP VIEW "{view}"
             """.format(view=view)
@@ -383,6 +418,8 @@ class PanoramaDatalake:
 
     def create_table_view(self, datalake_table_name: str, view_name: str, fields: list):
         """Create an Athena view over a datalake table exposing the given fields."""
+        for name in (datalake_table_name, view_name, self.datalake_db):
+            identifier(name)
         fields_definition = []
         fields = list(fields)
 
@@ -390,7 +427,10 @@ class PanoramaDatalake:
             fields.extend(self.datalake_settings.get('base_partitions'))
 
         for field in fields:
+            identifier(field.get('name'))
             field_type = field.get('type').upper()
+            if not re.fullmatch(r'[A-Z]+(?:\(\d+(?:,\s*\d+)?\))?', field_type):
+                raise ValueError(f'Invalid field type: {field_type}')
 
             # Numeric types
             if field_type in ['INT', 'TINYINT', 'SMALLINT', 'MEDIUMINT', 'BIGINT']:

@@ -1,0 +1,3 @@
+include panorama.py requirements.in requirements.txt Dockerfile
+include panorama_*_settings_example.yaml
+recursive-include openedx_views *.sql

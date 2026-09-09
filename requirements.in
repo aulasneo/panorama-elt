@@ -1,13 +1,9 @@
 boto3
 botocore
-jmespath
-pymongo
-PyMySQL
-python-dateutil
+pymongo>=4.18,<5
+PyMySQL[rsa]>=1.1.2,<2
 PyYAML
-s3transfer
-six
-urllib3
 click
 openpyxl
-cryptography
+# Security floor, independently resolved from the LMS compatibility constraints.
+cryptography>=50.0.1,<51

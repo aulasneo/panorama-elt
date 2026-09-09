@@ -7,6 +7,7 @@ panorama --help
 """
 import logging
 import sys
+import re
 
 import yaml
 
@@ -14,7 +15,7 @@ import click
 
 from panorama_elt.course_structures_datasource.course_structures_datasource import CourseStructuresDatasource
 from panorama_elt.csv_datasource.csv_datasource import CSVDatasource
-from panorama_elt.mysql_datasource.mysql_datasource import MySQLDatasource
+from panorama_elt.mysql_datasource.mysql_datasource import MySQLDatasource, identifier
 from panorama_elt.xls_datasource.xls_datasource import XLSDatasource
 
 from panorama_elt.panorama_datalake.panorama_datalake import PanoramaDatalake
@@ -35,7 +36,57 @@ def load_settings(config_file: str) -> dict:
         log.error("No config file {} found".format(config_file))
         sys.exit(1)
 
+    validate_settings(yaml_settings)
     return yaml_settings
+
+
+def validate_settings(settings):
+    """Reject malformed configuration before constructing clients."""
+    if not isinstance(settings, dict) or not isinstance(settings.get('datalake'), dict):
+        raise click.ClickException('Settings must contain a datalake mapping')
+    sources = settings.get('datasources')
+    if not isinstance(sources, list) or not sources:
+        raise click.ClickException('Settings must contain a nonempty datasources list')
+    names = set()
+    for source in sources:
+        if not isinstance(source, dict) or not isinstance(source.get('name'), str):
+            raise click.ClickException('Every datasource requires a name')
+        if source['name'] in names or source.get('type') not in {
+                'mysql', 'openedx_course_structures', 'csv', 'xls'}:
+            raise click.ClickException('Duplicate datasource name or unsupported type')
+        names.add(source['name'])
+        if not isinstance(source.get('tables', []), list):
+            raise click.ClickException('Datasource tables must be a list')
+        for table in source.get('tables', []):
+            if not isinstance(table, dict) or not isinstance(table.get('name'), str):
+                raise click.ClickException('Every table requires a name')
+            if source['type'] == 'mysql':
+                try:
+                    identifier(table['name'])
+                    fields = table.get('fields', [])
+                    if not isinstance(fields, list):
+                        raise ValueError('Table fields must be a list')
+                    for field in fields:
+                        if not isinstance(field, dict):
+                            raise ValueError('Fields must be mappings')
+                        identifier(field.get('name'))
+                    partitions = table.get('partitions') or {}
+                    if not isinstance(partitions, dict):
+                        raise ValueError('Partitions must be a mapping')
+                    partition_fields = partitions.get('partition_fields', [])
+                    if not isinstance(partition_fields, list):
+                        raise ValueError('Partition fields must be a list')
+                    interval = partitions.get('interval')
+                    if interval:
+                        identifier(partitions.get('timestamp_field'))
+                        if not re.fullmatch(r'\d+\s+(SECOND|MINUTE|HOUR|DAY|WEEK|MONTH|YEAR)', str(interval), re.I):
+                            raise ValueError('Invalid incremental interval')
+                    for field in partition_fields:
+                        identifier(field)
+                        if fields and field not in [item['name'] for item in fields]:
+                            raise ValueError('Partition field must be included in fields')
+                except (ValueError, TypeError) as exc:
+                    raise click.ClickException(str(exc)) from exc
 
 
 def save_settings(config_file, settings) -> None:
@@ -65,12 +116,6 @@ def cli(ctx, debug, file):
     # Load settings file
     settings = load_settings(config_file)
 
-    datalake_settings = settings.get('datalake')
-
-    # Create the datalake object
-    datalake = PanoramaDatalake(datalake_settings)
-
-    ctx.obj['datalake'] = datalake
     ctx.obj['config_file'] = config_file
     ctx.obj['settings'] = settings
 
@@ -94,6 +139,9 @@ def _get_datasource(datalake, ds_settings):
         log.error("Datasource type {} not supported".format(ds_type))
         sys.exit(1)
 
+    context = click.get_current_context(silent=True)
+    if context is not None and hasattr(datasource, 'close'):
+        context.call_on_close(datasource.close)
     return datasource
 
 
@@ -119,12 +167,25 @@ def _dispatch(ctx, worker, all_, datasource, tables, **extra):
       * at least one of --all/--datasource/--tables must be given
     """
     if all_ and tables:
-        click.echo("--all and --table cannot be used together")
-        return
+        raise click.UsageError("--all and --table cannot be used together")
+    if all_ and datasource:
+        raise click.UsageError("--all and --datasource cannot be used together")
     if not all_ and not (datasource or tables):
-        click.echo("Either --all or --datasource or --table must be specified")
-        return
-    worker(ctx, datasource=datasource, tables=tables, **extra)
+        raise click.UsageError("Either --all or --datasource or --table must be specified")
+    sources = list(_iter_datasources(ctx.obj['settings'], datasource))
+    if not sources:
+        raise click.UsageError(f'Unknown datasource: {datasource}')
+    if tables and worker is not _set_tables:
+        known = {table['name'] for source in sources for table in source.get('tables', [])}
+        missing = set(tables.split(',')) - known
+        if missing:
+            raise click.UsageError(f'Unknown tables: {sorted(missing)}')
+    try:
+        if 'datalake' not in ctx.obj:
+            ctx.obj['datalake'] = PanoramaDatalake(ctx.obj['settings']['datalake'])
+        worker(ctx, datasource=datasource, tables=tables, **extra)
+    except Exception as exc:
+        raise click.ClickException(str(exc)) from exc
 
 
 def _iter_datasources(settings, datasource=None):
@@ -174,9 +235,23 @@ def _extract_and_load(ctx, datasource=None, tables=None, force=False):
     :return:
     """
     datalake = ctx.obj['datalake']
+    failures = []
     for ds_settings in _iter_datasources(ctx.obj['settings'], datasource):
-        datasource_obj = _get_datasource(datalake, ds_settings)
-        datasource_obj.extract_and_load(selected_tables=tables, force=force)
+        datasource_obj = None
+        try:
+            datasource_obj = _get_datasource(datalake, ds_settings)
+            datasource_obj.extract_and_load(selected_tables=tables, force=force)
+        except Exception as exc:
+            failures.append(f"{ds_settings['name']}: {exc}")
+        finally:
+            if datasource_obj is not None and hasattr(datasource_obj, 'close'):
+                datasource_obj.close()
+    try:
+        datalake.get_athena_executions()
+    except Exception as exc:
+        failures.append(str(exc))
+    if failures:
+        raise RuntimeError('Incomplete extraction: ' + '; '.join(failures))
 
 
 @cli.command(help='Creates datalake tables for all tables defined in the settings file. '
@@ -302,9 +377,11 @@ def _set_tables(ctx, datasource=None, tables=None):
     config_file = ctx.obj['config_file']
 
     selected = tables.split(',') if tables else None
+    found = set()
     for ds_settings in _iter_datasources(settings, datasource):
         datasource_obj = _get_datasource(datalake, ds_settings)
         ds_tables = datasource_obj.get_tables()
+        found.update(ds_tables)
 
         if selected:
             table_list = [t for t in ds_tables if t in selected]
@@ -313,6 +390,8 @@ def _set_tables(ctx, datasource=None, tables=None):
 
         ds_settings['tables'] = [{'name': t} for t in table_list]
 
+    if selected and set(selected) - found:
+        raise ValueError(f'Unknown source tables: {sorted(set(selected) - found)}')
     save_settings(config_file=config_file, settings=settings)
 
     click.echo("{} updated".format(config_file))
@@ -361,7 +440,7 @@ def _set_tables_fields(ctx, datasource=None, tables=None):
 @click.pass_context
 def test_connections(ctx):
     """Test the datalake connection and every configured datasource connection."""
-    datalake = ctx.obj['datalake']
+    datalake = PanoramaDatalake(ctx.obj['settings']['datalake'])
 
     results = []
 

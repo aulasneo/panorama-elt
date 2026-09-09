@@ -6,6 +6,8 @@ datalake and a monkeypatched ``_get_datasource``.
 import types
 
 import yaml
+import click
+import pytest
 
 from panorama_elt import panorama_elt
 
@@ -71,16 +73,16 @@ SETTINGS = {
 
 def test_dispatch_rejects_all_with_tables(capsys):
     called = []
-    panorama_elt._dispatch(None, lambda *a, **k: called.append(1), all_=True, datasource=None, tables="t")
+    with pytest.raises(click.UsageError, match='cannot be used together'):
+        panorama_elt._dispatch(None, lambda *a, **k: called.append(1), all_=True, datasource=None, tables="t")
     assert called == []
-    assert "--all and --table cannot be used together" in capsys.readouterr().out
 
 
 def test_dispatch_requires_a_selector(capsys):
     called = []
-    panorama_elt._dispatch(None, lambda *a, **k: called.append(1), all_=False, datasource=None, tables=None)
+    with pytest.raises(click.UsageError, match='must be specified'):
+        panorama_elt._dispatch(None, lambda *a, **k: called.append(1), all_=False, datasource=None, tables=None)
     assert called == []
-    assert "Either --all or --datasource or --table must be specified" in capsys.readouterr().out
 
 
 def test_dispatch_forwards_selectors_and_extras():
@@ -89,8 +91,9 @@ def test_dispatch_forwards_selectors_and_extras():
     def worker(ctx, datasource=None, tables=None, **extra):
         received.update(ctx=ctx, datasource=datasource, tables=tables, extra=extra)
 
-    panorama_elt._dispatch("CTX", worker, all_=False, datasource="ds", tables="t1,t2", force=True)
-    assert received == {"ctx": "CTX", "datasource": "ds", "tables": "t1,t2", "extra": {"force": True}}
+    ctx = make_ctx(SETTINGS)
+    panorama_elt._dispatch(ctx, worker, all_=False, datasource="a", tables="t1,t2", force=True)
+    assert received == {"ctx": ctx, "datasource": "a", "tables": "t1,t2", "extra": {"force": True}}
 
 
 def test_dispatch_all_runs_worker():
@@ -99,7 +102,7 @@ def test_dispatch_all_runs_worker():
     def worker(ctx, datasource=None, tables=None, **extra):
         received.update(datasource=datasource, tables=tables)
 
-    panorama_elt._dispatch("CTX", worker, all_=True, datasource=None, tables=None)
+    panorama_elt._dispatch(make_ctx(SETTINGS), worker, all_=True, datasource=None, tables=None)
     assert received == {"datasource": None, "tables": None}
 
 

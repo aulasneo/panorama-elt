@@ -7,7 +7,8 @@ Data can be partitioned by a list of base partitions and a set of fields.
 import datetime
 import os
 import csv
-import sys
+import re
+import tempfile
 
 import pymysql
 
@@ -27,34 +28,36 @@ def save_rows(filename: str, fields: list, rows: iter) -> None:
 
     log.debug("Saving {}".format(filename))
 
-    # As some fields may include double quotes, we need to set the csv writer to
-    # use backslash as escape char and not double, double quotes.
-    # Unfortunately, there are cases where there is field content which already
-    # have escaped chars. There is a bug in csv writer by which it will not
-    # escape preexistent escape chars (see https://bugs.python.org/issue12178)
-    # This should be fixed by python 3.10. To keep compatibility with previous
-    # versions, we unpack all the data and escape backslashes in all strings.
-    # In python 3.10, the next block can be removed and use
-    # write.writerows(rows) directly
-    rows_list = []
-    for row in rows:
-        fields_list = []
-        for field in row:
-            if isinstance(field, str):
-                field = field.replace('\\', '\\\\')
-                # Escape newline and CR characters
-                field = field.replace('\r', '\\r')
-                field = field.replace('\n', '\\n')
-            elif isinstance(field, datetime.datetime):
-                # When the seconds are zero, the microseconds are not displayed
-                field = field.strftime('%Y-%m-%d %H:%M:%S.') + '%06d' % field.microsecond
-            fields_list.append(field)
-        rows_list.append(fields_list)
+    # Preserve the existing Athena consumer wire format: backslash escaping,
+    # literal CR/LF sequences and six-digit timestamp fractions. The historical
+    # pre-3.10 workaround also doubles existing backslashes before CSV escaping;
+    # removing it would change exported values and requires a consumer migration.
+    def converted_rows():
+        for row in rows:
+            fields_list = []
+            for field in row:
+                if isinstance(field, str):
+                    field = field.replace('\\', '\\\\').replace('\r', '\\r').replace('\n', '\\n')
+                elif isinstance(field, datetime.datetime):
+                    field = field.strftime('%Y-%m-%d %H:%M:%S.') + '%06d' % field.microsecond
+                fields_list.append(field)
+            yield fields_list
 
-    with open(filename, 'w', encoding='utf-8') as f:
-        write = csv.writer(f, doublequote=False, escapechar='\\')
-        write.writerow(fields)
-        write.writerows(rows_list)
+    try:
+        with open(filename, 'w', encoding='utf-8') as f:
+            write = csv.writer(f, doublequote=False, escapechar='\\')
+            write.writerow(fields)
+            write.writerows(converted_rows())
+    finally:
+        if hasattr(rows, 'close'):
+            rows.close()
+
+
+def identifier(value):
+    """Quote a configured SQL identifier, rejecting expressions."""
+    if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', value):
+        raise ValueError(f'Invalid SQL identifier: {value!r}')
+    return f'`{value}`'
 
 
 class MySQLDatasource:
@@ -80,11 +83,11 @@ class MySQLDatasource:
                 passwd=mysql_password,
                 db=mysql_database
             )
+            self.conn = conn
             self.cur = conn.cursor()
 
         except pymysql.err.OperationalError as e:
-            log.error(e)
-            sys.exit(1)
+            raise RuntimeError('Unable to connect to MySQL') from e
 
         # This dicts defines which tables have partitions and static fields configurations (if present)
         # The interval is in MYSQL format
@@ -116,6 +119,16 @@ class MySQLDatasource:
 
         self.datalake = datalake
         self.db = mysql_database
+        self.closed = False
+
+    def close(self):
+        """Release database resources after the command."""
+        if not self.closed:
+            self.closed = True
+            try:
+                self.cur.close()
+            finally:
+                self.conn.close()
 
     def _upload_table_from_file(self, filename, table, field_partitions=None):
         """Upload a table file using optional datalake/S3 table overrides from settings."""
@@ -123,6 +136,7 @@ class MySQLDatasource:
             'filename': filename,
             'table': table,
             'update_partitions': True,
+            's3_filename': f'{table}.csv',
         }
         if field_partitions:
             upload_kwargs['field_partitions'] = field_partitions
@@ -180,15 +194,13 @@ class MySQLDatasource:
         fields_query = """
             select COLUMN_NAME, DATA_TYPE
             from INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_NAME = "{table}"
-            AND TABLE_SCHEMA = "{db}"
-            """.format(
-            table=table,
-            db=self.db)
+            WHERE TABLE_NAME = %s
+            AND TABLE_SCHEMA = %s
+            """
 
         log.debug("Querying mysql fields: {}".format(fields_query))
 
-        self.cur.execute(fields_query)
+        self.cur.execute(fields_query, (table, self.db))
         fields = self.cur.fetchall()
 
         log.debug("Fields in table: {}".format(fields))
@@ -200,7 +212,7 @@ class MySQLDatasource:
         return fields_list
 
     def get_rows(self, table: str, field_list: list = None,
-                 where: str = None, distinct: bool = False) -> iter:
+                 where: str = None, distinct: bool = False, parameters=()) -> iter:
         """
         Returns the rows of the mysql table.
 
@@ -211,27 +223,26 @@ class MySQLDatasource:
         :return:
         """
 
+        constants = []
         if not field_list:
             log.warning("No field list provided for table '{}'. Using '*' to query all mysql fields.".format(table))
             fields_statement = '*'
         else:
 
-            fields = self.table_fields_settings[table]
+            fields = self.table_fields_settings.get(table, [{'name': name} for name in field_list])
             field_statement_list = []
             for f in fields:
                 # Omit fields not in the field list
                 if f.get('name') in field_list:
                     # If a value key is set in the field configuration, set as a constant value for the query
                     if 'value' in f:
-                        if not f.get('value'):
-                            field = "NULL as `{}`".format(f.get('name'))
-                        elif f.get('type') in ['CHAR', 'VARCHAR', 'BLOB', 'TEXT', 'TINYBLOB', 'TINYTEXT', 'ENUM',
-                                               'MEDIUMBLOB', 'MEDIUMTEXT', 'LONGBLOB', 'LONGTEXT', 'STRING']:
-                            field = "'{}' as `{}`".format(f.get('value'), f.get('name'))
+                        if f.get('value') is None:
+                            field = "NULL as {}".format(identifier(f.get('name')))
                         else:
-                            field = "{} as `{}`".format(f.get('value'), f.get('name'))
+                            field = "%s as {}".format(identifier(f.get('name')))
+                            constants.append(f.get('value'))
                     else:
-                        field = '`{}`'.format(f.get('name'))
+                        field = identifier(f.get('name'))
 
                     field_statement_list.append(field)
 
@@ -242,22 +253,26 @@ class MySQLDatasource:
         query = 'select {prefix} {fields} from {table} {where_clause}'.format(
             prefix='distinct' if distinct else '',
             fields=fields_statement,
-            table=table,
+            table=identifier(table),
             where_clause=where_clause)
 
         log.debug("Querying mysql rows: {}".format(query))
 
-        self.cur.execute(query)
-
-        rows = self.cur.fetchall()
-
-        return rows
+        def rows():
+            with self.conn.cursor(pymysql.cursors.SSCursor) as cursor:
+                cursor.execute(query, tuple(constants) + tuple(parameters))
+                while batch := cursor.fetchmany(1000):
+                    yield from batch
+        return rows()
 
     def _extract_and_load_table(self, table: str, force: bool = False):
         """Extract and upload one configured table."""
-        fields = self.get_fields(table=table)
+        with tempfile.TemporaryDirectory(prefix='panorama-') as directory:
+            self._export_table(table, force, os.path.join(directory, 'export.csv'))
 
-        filename = "{}.csv".format(table)
+    def _export_table(self, table, force, filename):
+        """Export in an isolated directory that is cleaned on every failure path."""
+        fields = [field['name'] if isinstance(field, dict) else field for field in self.get_fields(table=table)]
 
         partitions = self.field_partitions.get(table)
         if partitions:
@@ -281,11 +296,13 @@ class MySQLDatasource:
                     log.info("Forcing a full dump")
                 else:
                     # interval will be used in a where clause to query all the partitions with changes
-                    interval = "{} >= date_sub(now(), interval {})".format(timestamp_field, update_interval)
+                    if not re.fullmatch(r'\d+\s+(SECOND|MINUTE|HOUR|DAY|WEEK|MONTH|YEAR)', str(update_interval), re.I):
+                        raise ValueError('Invalid incremental interval')
+                    interval = "{} >= date_sub(now(), interval {})".format(identifier(timestamp_field), update_interval)
                     log.debug("Doing incremental update of the last {}".format(update_interval))
 
             # Get a list of all distinct partition field values in the recordset within the last increment period
-            values_list = self.get_rows(table=table, field_list=partition_fields, distinct=True, where=interval)
+            values_list = list(self.get_rows(table=table, field_list=partition_fields, distinct=True, where=interval))
             log.info("{} partitions found to update".format(len(values_list)))
 
             # Now we need to make one query for each set of values representing partitions, with changes in the
@@ -295,15 +312,17 @@ class MySQLDatasource:
 
                 # Create a filter to match all partition fields with the values with changes in the interval
                 where_clauses = []
+                parameters = []
                 for partition_field, value in zip(partition_fields, values):
-                    where_clauses.append("{} = '{}'".format(partition_field, value))
+                    where_clauses.append("{} <=> %s".format(identifier(partition_field)))
+                    parameters.append(value)
                 where_clause = " and ".join(where_clauses)
 
                 log.info("Getting partition {}/{}".format(counter, len(values_list)))
                 counter += 1
 
                 # Query mysql table
-                rows = self.get_rows(table=table, field_list=fields, where=where_clause)
+                rows = self.get_rows(table=table, field_list=fields, where=where_clause, parameters=parameters)
 
                 save_rows(filename=filename, fields=fields, rows=rows)
 
@@ -333,7 +352,8 @@ class MySQLDatasource:
         :param force: Forces a full update of all the partitions
         :return:
         """
-        for table in self.table_fields:
+        failures = []
+        for table in [item['name'] for item in self.table_settings or []]:
 
             if selected_tables and table not in selected_tables.split(','):
                 continue
@@ -342,8 +362,8 @@ class MySQLDatasource:
 
             try:
                 self._extract_and_load_table(table=table, force=force)
-            except pymysql.err.MySQLError as e:
+            except Exception as e:  # Finish independent tables, then report an incomplete run.
+                failures.append(f'{table}: {e}')
                 log.error("Skipping table '{}' after MySQL error: {}".format(table, e))
-                filename = "{}.csv".format(table)
-                if os.path.exists(filename):
-                    os.remove(filename)
+        if failures:
+            raise RuntimeError('Incomplete extraction: ' + '; '.join(failures))

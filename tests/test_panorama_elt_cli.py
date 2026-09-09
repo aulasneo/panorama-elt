@@ -10,8 +10,9 @@ from panorama_elt.xls_datasource.xls_datasource import XLSDatasource
 
 def test_load_settings_round_trip(tmp_path):
     config = tmp_path / "settings.yaml"
-    config.write_text(yaml.safe_dump({"datalake": {"base_prefix": "p"}}))
-    assert panorama_elt.load_settings(str(config)) == {"datalake": {"base_prefix": "p"}}
+    settings = {"datalake": {"base_prefix": "p"}, "datasources": [{"name": "a", "type": "csv"}]}
+    config.write_text(yaml.safe_dump(settings))
+    assert panorama_elt.load_settings(str(config)) == settings
 
 
 def test_load_settings_missing_file_exits():
@@ -58,7 +59,7 @@ def _write_settings(tmp_path):
 def test_cli_requires_a_selector(patch_boto3, tmp_path):
     config = _write_settings(tmp_path)
     result = CliRunner().invoke(panorama_elt.cli, ["--settings", config, "extract-and-load"])
-    assert result.exit_code == 0
+    assert result.exit_code == 2
     assert "Either --all or --datasource or --table must be specified" in result.output
 
 
@@ -90,7 +91,7 @@ def test_cli_version(patch_boto3):
 def test_cli_commands_require_a_selector(patch_boto3, tmp_path, command):
     config = _write_settings(tmp_path)
     result = CliRunner().invoke(panorama_elt.cli, ["--settings", config, command])
-    assert result.exit_code == 0
+    assert result.exit_code == 2
     assert "Either --all or --datasource or --table must be specified" in result.output
 
 
@@ -98,7 +99,7 @@ def test_cli_command_rejects_all_with_tables(patch_boto3, tmp_path):
     config = _write_settings(tmp_path)
     result = CliRunner().invoke(
         panorama_elt.cli, ["--settings", config, "create-datalake-tables", "--all", "--tables", "x"])
-    assert result.exit_code == 0
+    assert result.exit_code == 2
     assert "--all and --table cannot be used together" in result.output
 
 

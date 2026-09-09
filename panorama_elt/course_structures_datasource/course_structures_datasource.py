@@ -6,7 +6,7 @@ versions of each course. The table will be saved as a csv file and uploaded to S
 import csv
 import os
 import re
-import sys
+import tempfile
 
 import bson
 import pymysql
@@ -29,14 +29,14 @@ class CourseStructuresDatasource:
     ):
 
         self.datalake = datalake
+        self.closed = False
         mongodb_username = datasource_settings.get('mongodb_username')
         mongodb_password = datasource_settings.get('mongodb_password')
         mongodb_host = datasource_settings.get('mongodb_host', '127.0.0.1')
         self.mongodb_database = datasource_settings.get('mongodb_database', 'edxapp')
 
         # Create a connection using MongoClient.
-        log.debug("Connecting to mongo. Host: {} username: {} password: {}, db: {}".format(
-            mongodb_host, mongodb_username, mongodb_password, self.mongodb_database))
+        log.debug("Connecting to MongoDB database %s", self.mongodb_database)
 
         try:
             self.client = MongoClient(
@@ -45,12 +45,12 @@ class CourseStructuresDatasource:
                     password=mongodb_password,
                     authSource=self.mongodb_database,
                     readPreference='secondaryPreferred',
-                    directConnection=True
+                    directConnection=datasource_settings.get('mongodb_direct_connection', False),
+                    serverSelectionTimeoutMS=10000,
                     )
             self.mongodb = self.client[self.mongodb_database]
         except pymongo.errors.ConfigurationError as e:
-            log.error(e)
-            sys.exit(1)
+            raise RuntimeError('Invalid MongoDB connection configuration') from e
 
         # With split mongo, the active versions are stored in a mysql table
         if datasource_settings.get('mysql_host'):
@@ -62,8 +62,7 @@ class CourseStructuresDatasource:
             mysql_host = datasource_settings.get('mysql_host', '127.0.0.1')
             mysql_database = datasource_settings.get('mysql_database', 'edxapp')
 
-            log.debug(f"Connecting MySQL: host: {mysql_host}:{mysql_port}, db: {mysql_database}, "
-                      f"user: {mysql_username} password: {mysql_password}")
+            log.debug("Connecting to MySQL database %s", mysql_database)
 
             try:
                 conn = pymysql.connect(
@@ -73,14 +72,26 @@ class CourseStructuresDatasource:
                     passwd=mysql_password,
                     db=mysql_database
                 )
+                self.conn = conn
                 self.cur = conn.cursor()
 
             except pymysql.err.OperationalError as e:
-                log.error(e)
-                sys.exit(1)
+                self.client.close()
+                raise RuntimeError('Unable to connect to MySQL course index') from e
         else:
             log.info("MySQL host not defined. Using MongoDB to get active versions")
             self.use_split_mongo_active_versions = False
+
+    def close(self):
+        """Close both database clients."""
+        if not self.closed:
+            self.closed = True
+            self.client.close()
+            if self.use_split_mongo_active_versions:
+                try:
+                    self.cur.close()
+                finally:
+                    self.conn.close()
 
     def test_connections(self) -> dict:
         """
@@ -89,7 +100,9 @@ class CourseStructuresDatasource:
         """
 
         try:
+            self.client.admin.command('ping')
             modulestore = self.mongodb.get_collection('modulestore')
+            modulestore.find_one({}, {'_id': 1})
             if modulestore is not None:
                 results = {'MongoDB': 'OK'}
             else:
@@ -192,7 +205,7 @@ class CourseStructuresDatasource:
                     log.error("No published_branch information found in record {}".format(record))
         except pymongo.errors.OperationFailure as e:
             log.error("Error accessing MongoDB: {}".format(e))
-            return None
+            raise
 
         log.info("{} active versions found".format(len(active_versions)))
         return active_versions
@@ -292,7 +305,7 @@ class CourseStructuresDatasource:
 
             if not structure:
                 log.error(f"No course structure found for published branch {course_block_id} of course {course_id}")
-                continue
+                raise RuntimeError(f'Missing published structure for {course_id}')
 
             # The active_version dict only has information of the course id. This info is not in the structure element
             organization = active_version.get('org')
@@ -321,9 +334,11 @@ class CourseStructuresDatasource:
                 if block_type == 'problem':
                     weight = fields.get('weight')
 
-                    if not weight:
+                    if weight is None:
                         definition_id = bson.objectid.ObjectId(block.get('definition'))
-                        definition = self.mongodb.modulestore.definitions.find({'_id': {'$eq': definition_id}})[0]
+                        definition = self.mongodb.modulestore.definitions.find_one({'_id': definition_id})
+                        if not definition or 'fields' not in definition:
+                            raise RuntimeError(f'Missing problem definition for {module_location}')
 
                         response_tags = [
                             '<choiceresponse',
@@ -354,7 +369,7 @@ class CourseStructuresDatasource:
                             if not weight:
                                 log.warning(f"No response tag found in problem {module_location}")
                         else:
-                            log.warning(f"No data found in problem {module_location}")
+                            raise RuntimeError(f"No data found in problem {module_location}")
                 else:
                     # Other blocks than problem don't have a weight
                     weight = ''
@@ -378,7 +393,7 @@ class CourseStructuresDatasource:
 
             # After checking all the blocks, there should be one for the course root
             if course_id not in blocks:
-                log.error("No course block found in course {}".format(course_block_id))
+                raise RuntimeError("No course block found in course {}".format(course_block_id))
             else:
                 # Starting with the root block of the course, we fill the tree with the parent branch information
                 self.fill_parents(blocks=blocks, block_id=course_id)
@@ -400,8 +415,7 @@ class CourseStructuresDatasource:
 
         block = blocks.get(block_id)
         if not block:
-            log.error("No block id {} found".format(block_id))
-            return
+            raise RuntimeError("No block id {} found".format(block_id))
 
         # Course blocks don't have a parent. All the rest do.
         if parent_block_id:
@@ -471,7 +485,12 @@ class CourseStructuresDatasource:
 
         fields = self.get_fields(table="course_structures")
 
-        with open(FILENAME, 'w', encoding='utf-8') as f:
+        with tempfile.TemporaryDirectory(prefix='panorama-course-') as directory:
+            self._save_blocks(blocks, fields, os.path.join(directory, FILENAME))
+
+    def _save_blocks(self, blocks, fields, filename):
+        """Publish only a fully validated snapshot, cleaning local files on errors."""
+        with open(filename, 'w', encoding='utf-8') as f:
             csv_writer = csv.writer(f)
             csv_writer.writerow([f.get('name') for f in fields])
 
@@ -496,8 +515,7 @@ class CourseStructuresDatasource:
                 ]
                 csv_writer.writerow(row)
 
-        self.datalake.upload_table_from_file(filename=FILENAME, table='course_structures', update_partitions=True)
-
-        os.remove(FILENAME)
+        self.datalake.upload_table_from_file(filename=filename, table='course_structures',
+                                             s3_filename=FILENAME, update_partitions=True)
 
         log.debug("Process completed")

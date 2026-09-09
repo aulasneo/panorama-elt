@@ -15,6 +15,11 @@ class FakeSheet:
     def cell(self, row, column):
         return types.SimpleNamespace(value=self.grid.get((row, column)))
 
+    def iter_rows(self, min_row, max_col, values_only):
+        assert values_only
+        for row in range(min_row, max((cell[0] for cell in self.grid), default=0) + 1):
+            yield tuple(self.grid.get((row, col)) for col in range(1, max_col + 1))
+
 
 class FakeWorkbook:
     def __init__(self, sheets):
@@ -34,6 +39,9 @@ class FakeDatalake:
         self.uploads = []
 
     def upload_table_from_file(self, **kwargs):
+        kwargs['filename'] = kwargs['table'] + '.csv'
+        if kwargs.get('s3_filename') == kwargs['table'] + '.csv':
+            kwargs.pop('s3_filename')
         self.uploads.append(kwargs)
 
 
@@ -41,7 +49,8 @@ def patch_workbook(monkeypatch, sheets):
     """Patch openpyxl.load_workbook to hand back fresh fake workbooks, recording each."""
     instances = []
 
-    def load_workbook(_location):
+    def load_workbook(_location, read_only):
+        assert read_only
         workbook = FakeWorkbook(sheets)
         instances.append(workbook)
         return workbook

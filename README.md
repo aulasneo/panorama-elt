@@ -417,3 +417,90 @@ This software is licenced under Apache 2.0 license. Please see LICENSE for more 
 
 Contributions are welcome! Please submit your PR and we will check it.
 For questions, please send an email to <mailto:andres@aulasneo.com>.
+# Tutor 22 / Open edX Verawood validation
+
+This upgrade keeps the package version and existing CSV columns and S3 consumer
+paths unchanged. The target platform is `release/verawood.1`; Tutor 22.0.2 uses
+MySQL 8.4.11 and MongoDB 7.0.39. The extractor runs separately on Python 3.12 and
+does not share the LMS dependency constraints. Do not reuse the old Python 3.8
+`venv`.
+
+The refreshed runtime lock resolves Boto3/Botocore 1.43.89, PyMongo 4.18.0,
+PyMySQL 1.2.0 and cryptography 50.0.1. These are independently tested extractor
+dependencies, not the Verawood LMS compatibility baseline. `PyMySQL[rsa]`
+explicitly supplies the cryptography dependency for MySQL SHA-2 authentication.
+Direct imports retain `botocore`; `jmespath`, `s3transfer`, `six`, `urllib3` and
+`python-dateutil` remain in the lock as dependencies of the AWS SDK rather than
+unnecessary direct requirements.
+
+[PyMongo's supported servers](https://pypi.org/project/pymongo/) include MongoDB
+7.0. [PyMySQL](https://github.com/PyMySQL/PyMySQL) supports MySQL 8.x and documents
+the `rsa` extra for `sha256_password`/`caching_sha2_password`. This establishes
+driver protocol support; it does not substitute for testing the migrated schema,
+authentication configuration or a real replica set. Mongo topology discovery is
+enabled by default; `mongodb_direct_connection: true` is an explicit option for
+single-endpoint development tunnels. Connection diagnostics issue a real ping
+and read, rather than merely obtaining a collection handle.
+
+[cryptography 50.0.0](https://cryptography.io/en/stable/changelog/#v50-0-0)
+fixes the PKCS7 decryption oracle; 50.0.1 refreshes bundled OpenSSL to 4.0.2.
+The extractor does not decrypt PKCS7 messages or use the affected ChaCha20 APIs;
+its cryptography use is the MySQL driver's RSA authentication. The security floor
+is retained despite that limited exposure. A runtime lock audit on 2026-09-08
+reported no known vulnerabilities.
+
+Scheduled runs now return failure for incomplete table exports, failed Athena
+submissions and failed/cancelled/timed-out partition updates. Independent tables
+and datasources finish before aggregated failures are raised. Athena waits for
+at most 20 status polls with one second between pending polls; SDK requests have
+10 second connect/30 second read timeouts and at most three attempts. Missing
+Athena database/workgroup configuration fails required partition updates.
+Already uploaded objects are not rolled back when another table fails; a retry
+replaces the same consumer filenames. This is not an atomic datalake snapshot.
+
+MySQL exports fetch at most 1,000 rows at a time through an unbuffered cursor;
+Excel worksheets stream in read-only mode. Distinct MySQL partition keys and
+course structure graphs still reside in memory. Temporary exports are isolated
+and removed on success or failure, and database clients close after extraction.
+Missing published course structures, roots, children or problem definitions fail
+the course snapshot before upload. Explicit zero problem weights are preserved.
+An installation with no published courses retains the previous no-upload behavior;
+stale course objects and deleted/empty incremental partitions require a separate
+retention policy, not an implicit deletion during this upgrade.
+
+SQL constant/partition data are bound parameters (including apostrophes, zero,
+false, empty strings and NULL). Configured identifiers reject SQL expressions.
+NULL partition keys use `__HIVE_DEFAULT_PARTITION__`; numeric keys use their
+string representation. Existing string partition URL escaping, S3 table overrides,
+filenames, CSV quote/backslash behavior and escaped CR/LF remain unchanged.
+Do not remove the existing CSV backslash transformation until Athena consumer
+comparisons authorize a format migration.
+
+Local validation in a fresh environment:
+
+```sh
+python3.12 -m venv /tmp/panorama-extractor-check
+/tmp/panorama-extractor-check/bin/pip install -r requirements-test.txt pip-audit
+/tmp/panorama-extractor-check/bin/pip install --no-deps .
+/tmp/panorama-extractor-check/bin/pip check
+/tmp/panorama-extractor-check/bin/pytest
+/tmp/panorama-extractor-check/bin/flake8 panorama_elt tests
+/tmp/panorama-extractor-check/bin/pylint panorama_elt
+/tmp/panorama-extractor-check/bin/pip-audit -r requirements.txt
+```
+
+The Docker image installs the reviewed lock before the package and runs
+`panorama-elt`; `python panorama.py` remains supported for existing cron recipes.
+SQL view assets remain at `/app/openedx_views` in the standalone image.
+The sdist includes the Dockerfile, runtime lock, compatibility script, SQL views
+and example configurations so that building from the source artifact retains
+these assets. Local validation on 2026-09-08 passed 138 tests with 93.86% coverage,
+flake8, pylint (9.96/10), wheel/sdist build, installed entry-point checks and
+`pip check`. Tests include a real XLSX read and PyMySQL RSA encryption/decryption
+with the upgraded cryptography library; database and AWS calls remain mocked.
+Before staging acceptance, compare every configured table/column (especially
+optional enterprise tables) to the migrated MySQL database; test real MySQL SHA-2
+credentials, replica-set discovery, unpublished/published courses, failed Athena
+queries and S3 retry behavior. Compare full/incremental counts, Unicode, multiline
+CSV and exact partition paths with existing consumers. These external service
+checks cannot be established by the local mocked suite.

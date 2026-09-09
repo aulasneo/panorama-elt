@@ -2,6 +2,7 @@
 import types
 
 import pymysql
+import pytest
 
 import panorama_elt.course_structures_datasource.course_structures_datasource as mod
 
@@ -26,8 +27,14 @@ class FakeCollection:
     def find(self, _query=None):
         return FakeFind(self._docs)
 
+    def find_one(self, *args):
+        return self._docs[0] if self._docs else None
+
 
 class FakeModulestore:
+    def find_one(self, *args):
+        return None
+
     def __init__(self, structures=None, active_versions=None, definitions=None):
         self.structures = FakeCollection(structures)
         self.active_versions = FakeCollection(active_versions)
@@ -58,6 +65,8 @@ def make_cs(monkeypatch, settings=None, mongodb=None, rows=None):
     mongodb = mongodb or FakeMongoDB()
 
     class FakeClient:
+        admin = types.SimpleNamespace(command=lambda *args: {'ok': 1})
+
         def __getitem__(self, _name):
             return mongodb
 
@@ -178,8 +187,8 @@ def test_get_blocks_counts_problem_weight_from_definition(monkeypatch):
 def test_get_blocks_skips_missing_structure(monkeypatch):
     ds = make_cs(monkeypatch)
     active_versions = {"course-v1:edX+DemoX+2024": {"published_branch": "BR_missing"}}
-    blocks = ds.get_blocks(course_structures={}, active_versions=active_versions)
-    assert blocks == {}
+    with pytest.raises(RuntimeError, match='Missing published structure'):
+        ds.get_blocks(course_structures={}, active_versions=active_versions)
 
 
 def test_extract_and_load_writes_and_uploads(monkeypatch, tmp_path):
@@ -200,7 +209,8 @@ def test_extract_and_load_writes_and_uploads(monkeypatch, tmp_path):
     ds.extract_and_load()
 
     assert uploads == [{
-        "filename": "course_structures.csv",
+        "filename": uploads[0]['filename'],
+        "s3_filename": "course_structures.csv",
         "table": "course_structures",
         "update_partitions": True,
     }]

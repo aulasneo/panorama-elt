@@ -11,7 +11,8 @@ COPY panorama_elt ./panorama_elt
 COPY openedx_views ./openedx_views
 
 RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir .
+    && pip install --no-cache-dir --no-deps . \
+    && pip check
 
 WORKDIR /work
 

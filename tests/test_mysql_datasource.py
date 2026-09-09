@@ -1,6 +1,7 @@
 """Tests for the MySQL datasource: CSV serialisation and cursor-driven queries."""
 import datetime
 import types
+from pathlib import Path
 
 import pymysql
 import pytest
@@ -12,12 +13,30 @@ class FakeCursor:
     def __init__(self, results=None):
         self.results = list(results or [])
         self.queries = []
+        self.parameters = []
+        self.active = []
+        self.closed = False
 
-    def execute(self, query):
+    def execute(self, query, parameters=()):
         self.queries.append(query)
+        self.parameters.append(parameters)
+        self.active = self.results.pop(0) if self.results else []
 
     def fetchall(self):
-        return self.results.pop(0) if self.results else []
+        return self.active
+
+    def fetchmany(self, size):
+        batch, self.active = self.active[:size], self.active[size:]
+        return batch
+
+    def close(self):
+        self.closed = True
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
 
 
 class ErrorOnceCursor(FakeCursor):
@@ -27,11 +46,11 @@ class ErrorOnceCursor(FakeCursor):
         super().__init__(results=results)
         self.raise_next = True
 
-    def execute(self, query):
+    def execute(self, query, parameters=()):
         if self.raise_next:
             self.raise_next = False
             raise pymysql.err.ProgrammingError("missing table")
-        super().execute(query)
+        super().execute(query, parameters)
 
 
 class FakeDatalake:
@@ -39,11 +58,16 @@ class FakeDatalake:
         self.uploads = []
 
     def upload_table_from_file(self, **kwargs):
+        assert Path(kwargs['filename']).is_file()
+        # Preserve assertions on consumer filenames while local files are isolated.
+        kwargs['filename'] = kwargs['table'] + '.csv'
+        if kwargs.get('s3_filename') == kwargs['table'] + '.csv':
+            kwargs.pop('s3_filename')
         self.uploads.append(kwargs)
 
 
 def make_datasource(monkeypatch, settings, cursor):
-    conn = types.SimpleNamespace(cursor=lambda: cursor)
+    conn = types.SimpleNamespace(cursor=lambda *args: cursor, close=lambda: None)
     monkeypatch.setattr(pymysql, "connect", lambda **_kwargs: conn)
     from panorama_elt.mysql_datasource.mysql_datasource import MySQLDatasource
     return MySQLDatasource(datalake=FakeDatalake(), datasource_settings=settings)
@@ -55,7 +79,7 @@ def test_init_exits_on_connection_error(monkeypatch):
 
     monkeypatch.setattr(pymysql, "connect", boom)
     from panorama_elt.mysql_datasource.mysql_datasource import MySQLDatasource
-    with pytest.raises(SystemExit):
+    with pytest.raises(RuntimeError, match='Unable to connect'):
         MySQLDatasource(datalake=None, datasource_settings={})
 
 
@@ -101,16 +125,17 @@ def test_get_fields_queries_information_schema(monkeypatch):
     fields = ds.get_fields("users", force_query=True)
     assert fields == [{"name": "id", "type": "int"}, {"name": "email", "type": "varchar"}]
     assert "INFORMATION_SCHEMA.COLUMNS" in cursor.queries[0]
-    assert 'TABLE_NAME = "users"' in cursor.queries[0]
+    assert 'TABLE_NAME = %s' in cursor.queries[0]
+    assert cursor.parameters[0] == ('users', 'edxapp')
 
 
 def test_get_rows_without_field_list_selects_star(monkeypatch):
     cursor = FakeCursor(results=[[(1,)]])
     ds = make_datasource(monkeypatch, {}, cursor)
-    rows = ds.get_rows("users")
+    rows = list(ds.get_rows("users"))
     assert rows == [(1,)]
     query = cursor.queries[0]
-    assert "*" in query and "from users" in query
+    assert "*" in query and "from `users`" in query
 
 
 def test_get_rows_builds_field_statements_with_constants(monkeypatch):
@@ -123,12 +148,13 @@ def test_get_rows_builds_field_statements_with_constants(monkeypatch):
     cursor = FakeCursor(results=[[]])
     ds = make_datasource(monkeypatch, settings, cursor)
 
-    ds.get_rows("users", field_list=["id", "source", "active", "empty"], where="id > 0", distinct=True)
+    list(ds.get_rows("users", field_list=["id", "source", "active", "empty"], where="id > 0", distinct=True))
     query = cursor.queries[0]
     assert "select distinct" in query
     assert "`id`" in query
-    assert "'edx' as `source`" in query
-    assert "1 as `active`" in query
+    assert "%s as `source`" in query
+    assert "%s as `active`" in query
+    assert cursor.parameters[0] == ('edx', 1)
     assert "NULL as `empty`" in query
     assert "where id > 0" in query
 
@@ -173,7 +199,7 @@ def test_extract_and_load_uses_configured_s3_table(monkeypatch, tmp_path):
 
     ds.extract_and_load()
 
-    assert "from mdl_course" in cursor.queries[0]
+    assert "from `mdl_course`" in cursor.queries[0]
     assert ds.datalake.uploads == [{
         "filename": "mdl_course.csv",
         "table": "mdl_course",
@@ -201,7 +227,8 @@ def test_extract_and_load_logs_mysql_errors_and_continues(monkeypatch, tmp_path)
     cursor = ErrorOnceCursor(results=[[(1, "a@x.com")]])
     ds = make_datasource(monkeypatch, settings, cursor)
 
-    ds.extract_and_load()
+    with pytest.raises(RuntimeError, match='missing table'):
+        ds.extract_and_load()
 
     assert ds.datalake.uploads == [{
         "filename": "users.csv",
@@ -236,7 +263,7 @@ def test_extract_and_load_with_partitions(monkeypatch, tmp_path):
          "field_partitions": {"org": "mit"}, "update_partitions": True},
     ]
     # the incremental query uses the configured interval on the timestamp field
-    assert any("created >= date_sub(now(), interval 1 day)" in q for q in cursor.queries)
+    assert any("`created` >= date_sub(now(), interval 1 day)" in q for q in cursor.queries)
     # the per-partition csv is cleaned up after each upload
     assert not (tmp_path / "events.csv").exists()
 

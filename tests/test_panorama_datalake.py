@@ -35,7 +35,8 @@ def test_query_athena_skips_without_db_or_workgroup(patch_boto3):
     from panorama_elt.panorama_datalake.panorama_datalake import PanoramaDatalake
 
     datalake = PanoramaDatalake({"panorama_raw_data_bucket": "b"})
-    datalake.query_athena("SHOW DATABASES")
+    with pytest.raises(ValueError, match='required'):
+        datalake.query_athena("SHOW DATABASES")
     assert datalake.executions == []
 
 

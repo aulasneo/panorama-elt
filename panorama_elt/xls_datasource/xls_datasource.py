@@ -7,6 +7,7 @@ The first row must have the field names.
 """
 import csv
 import os
+import tempfile
 from pathlib import Path
 
 import openpyxl
@@ -62,7 +63,7 @@ class XLSDatasource:
         Returns the list of sheet names, as a list of tables
         :return: list of sheet names
         """
-        workbook = openpyxl.load_workbook(self.location)
+        workbook = openpyxl.load_workbook(self.location, read_only=True)
         sheet_names = workbook.sheetnames
         workbook.close()
         return sheet_names
@@ -81,7 +82,7 @@ class XLSDatasource:
         if self.table_fields and self.table_fields.get(table) and not force_query:
             return self.table_fields.get(table)
 
-        workbook = openpyxl.load_workbook(self.location)
+        workbook = openpyxl.load_workbook(self.location, read_only=True)
         sheet = workbook[table]
         fields = []
 
@@ -111,7 +112,15 @@ class XLSDatasource:
         :return:
         """
 
-        workbook = openpyxl.load_workbook(self.location)
+        workbook = openpyxl.load_workbook(self.location, read_only=True)
+        try:
+            with tempfile.TemporaryDirectory(prefix='panorama-xls-') as directory:
+                self._export_workbook(workbook, selected_tables, directory)
+        finally:
+            workbook.close()
+
+    def _export_workbook(self, workbook, selected_tables, directory):
+        """Stream worksheet rows into temporary CSV files."""
         table_names = self.table_fields.keys() or workbook.sheetnames
         for table in table_names:
             if selected_tables and table not in selected_tables.split(','):
@@ -120,28 +129,21 @@ class XLSDatasource:
             fields = self.table_fields.get(table) or [f.get('name') for f in self.get_fields(table)]
             sheet = workbook[table]
 
-            rownum = 2
-            dataset = []
-            while rownum < 1000000:
-                row = []
-                for colnum in range(len(fields)):
-                    row.append(sheet.cell(row=rownum, column=colnum+1).value)
-                rownum += 1
-                if all(v is None for v in row):
-                    break
-                dataset.append(row)
-
             # Save the dataset in a csv file
-            filename = "{}.csv".format(table)
+            filename = os.path.join(directory, 'export.csv')
             with open(filename, 'w', encoding='utf-8') as f:
                 write = csv.writer(f, doublequote=False, escapechar='\\')
                 write.writerow(fields)
-                write.writerows(dataset)
+                for row in sheet.iter_rows(min_row=2, max_col=len(fields), values_only=True):
+                    if all(value is None for value in row):
+                        break
+                    write.writerow(row)
 
             upload_kwargs = {
                 'filename': filename,
                 'table': table,
                 'update_partitions': True,
+                's3_filename': f'{table}.csv',
             }
 
             s3_table = self.table_s3_tables.get(table)
@@ -156,5 +158,3 @@ class XLSDatasource:
             self.datalake.upload_table_from_file(**upload_kwargs)
 
             os.remove(filename)
-
-        workbook.close()
