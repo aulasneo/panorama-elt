@@ -1,0 +1,85 @@
+tests/test_mysql_datasource.py
+  s_fc06a46b08c17a::t_82e3212e99da99 82
+  s_fc06a46b08c17a::t_c7a81760829f84 4,16-18,20,22-23,26-39,49,53,61-65,70,128-129,135,138,151,155-157,202,230-231,266
+tests/test_panorama_datalake.py
+  s_fc06a46b08c17a::t_c7a81760829f84 38-39
+tests/test_panorama_elt_workers.py
+  s_fc06a46b08c17a::t_c7a81760829f84 9-10,76-77,83-84,94-96,105
+README.md
+  s_fc06a46b08c17a::t_af2e26091612e8 495-500
+  s_fc06a46b08c17a::t_8e9db0c9056565 420-494,501-506
+panorama_elt/panorama_datalake/panorama_datalake.py
+  s_fc06a46b08c17a::t_533e5edcf9086b 13,71-74,173-174,186-187,400,413,421-422,430,432-433
+  s_fc06a46b08c17a::t_0b48348f632425 7,18-29,134,152,159-161,191-195,213-214,219-220,238,281,285,316-319
+  s_fc06a46b08c17a::t_82e3212e99da99 75,166
+  s_fc06a46b08c17a::t_bbcd3c5c32fd01 240,387
+tests/test_xls_datasource.py
+  s_fc06a46b08c17a::t_687da7a6200ea4 18-22,42-44,52-53
+panorama_elt/xls_datasource/xls_datasource.py
+  s_fc06a46b08c17a::t_8726f1d0312688 10,66,85,115-123,133,137-140,146
+panorama_elt/mysql_datasource/mysql_datasource.py
+  s_fc06a46b08c17a::t_533e5edcf9086b 122,126-131
+  s_fc06a46b08c17a::t_bbcd3c5c32fd01 240
+  s_fc06a46b08c17a::t_96ae1321a76305 31-34
+  s_fc06a46b08c17a::t_46675bbd808661 46-53
+  s_fc06a46b08c17a::t_aa3872fee6626e 139,270-271,273-274
+  s_fc06a46b08c17a::t_67c33c17ef708f 275,356
+  s_fc06a46b08c17a::t_82e3212e99da99 90
+  s_fc06a46b08c17a::t_7866259a096a9c 10-11,35,56-60,86,123-125,197-199,203,215,226,232,239,242-243,245,256,261-266,299-301,305,315,317-318,325,355,365-366,368-369
+  s_fc06a46b08c17a::t_12d735e9ca747b 36-44
+  s_fc06a46b08c17a::t_5ef8257b5fafa4 45,54-55
+Dockerfile
+  s_fc06a46b08c17a::t_67c33c17ef708f 14-15
+MANIFEST.in
+  s_fc06a46b08c17a::t_46675bbd808661 1-3
+panorama_elt/course_structures_datasource/course_structures_datasource.py
+  s_fc06a46b08c17a::t_533e5edcf9086b 32,87-94
+  s_fc06a46b08c17a::t_248a9761f77a25 372,519
+  s_fc06a46b08c17a::t_8726f1d0312688 9,488-493,518
+  s_fc06a46b08c17a::t_aa3872fee6626e 39,48-49,65,75,85-86,95,103,105,208,308,337,339-341,396,418
+  s_fc06a46b08c17a::t_82e3212e99da99 53,79-80
+tests/test_verawood_reliability.py
+  s_fc06a46b08c17a::t_46675bbd808661 228-229
+  s_fc06a46b08c17a::t_248a9761f77a25 70,93,111-112,114-115,121-123,133,138,151-153
+  s_fc06a46b08c17a::t_05ee860559d05e 1-69,71-92,94-110,113,116-120,124-132,134-137,139-150,154-170
+  s_fc06a46b08c17a::t_187ad27b981184 177-178,192
+  s_fc06a46b08c17a::t_6689b52bc5d8ba 171-176,179-191,193-227,230-234
+requirements.in
+  s_fc06a46b08c17a::t_fb616d0a0660ba 3-4,8-9
+panorama_elt/panorama_elt.py
+  s_fc06a46b08c17a::t_46675bbd808661 171-172
+  s_fc06a46b08c17a::t_beeca233a5c606 39,43-62,90-91,170,174-183,186-188,238,240-254
+  s_fc06a46b08c17a::t_187ad27b981184 10,76-84
+  s_fc06a46b08c17a::t_fef5e1d68d7ec6 184-185,443
+  s_fc06a46b08c17a::t_533e5edcf9086b 142-144
+  s_fc06a46b08c17a::t_bbcd3c5c32fd01 380,384,393-394
+  s_fc06a46b08c17a::t_67c33c17ef708f 18,63-75,85-89
+tests/test_course_structures_datasource.py
+  s_fc06a46b08c17a::t_c7a81760829f84 5,30-32,35-37,68-69,190-191
+  s_fc06a46b08c17a::t_67c33c17ef708f 212-213
+tests/test_panorama_elt_cli.py
+  s_fc06a46b08c17a::t_c7a81760829f84 13-15,62,94,102
+requirements.txt
+  s_fc06a46b08c17a::t_b484d5cee5b6f0 1-3,5,10,12,14-17,30,35,38-39,41,43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "986ef92172d25cbceafae8520b65b0c42522ddc3",
+  "prompts": {},
+  "humans": {
+    "h_67430f944e00e2": {
+      "author": "Andrés González <andres@aulasneo.com>"
+    }
+  },
+  "sessions": {
+    "s_fc06a46b08c17a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a081aa-1820-7423-ace8-95212956e242",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Andrés González <andres@aulasneo.com>"
+    }
+  }
+}
