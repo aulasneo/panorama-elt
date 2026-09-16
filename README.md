@@ -425,13 +425,19 @@ MySQL 8.4.11 and MongoDB 7.0.39. The extractor runs separately on Python 3.12 an
 does not share the LMS dependency constraints. Do not reuse the old Python 3.8
 `venv`.
 
-The refreshed runtime lock resolves Boto3/Botocore 1.43.89, PyMongo 4.18.0,
+The refreshed runtime lock resolves Boto3/Botocore 1.43.89, PyMongo 4.17.0,
 PyMySQL 1.2.0 and cryptography 50.0.1. These are independently tested extractor
 dependencies, not the Verawood LMS compatibility baseline. `PyMySQL[rsa]`
 explicitly supplies the cryptography dependency for MySQL SHA-2 authentication.
 Direct imports retain `botocore`; `jmespath`, `s3transfer`, `six`, `urllib3` and
 `python-dateutil` remain in the lock as dependencies of the AWS SDK rather than
 unnecessary direct requirements.
+
+PyMongo is constrained to `>=4.17,<4.18` to retain MongoDB 4.2 (wire version 8)
+compatibility for older sites. [PyMongo 4.18 drops MongoDB 4.2 support](https://www.mongodb.com/docs/languages/python/pymongo-driver/current/reference/upgrade/).
+If extraction reports that wire version 8 is below the required version 9,
+rebuild and redeploy the extractor image from a source reference containing this
+constraint and its updated lockfile; restarting the existing image is insufficient.
 
 [PyMongo's supported servers](https://pypi.org/project/pymongo/) include MongoDB
 7.0. [PyMySQL](https://github.com/PyMySQL/PyMySQL) supports MySQL 8.x and documents

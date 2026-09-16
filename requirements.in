@@ -1,6 +1,7 @@
 boto3
 botocore
-pymongo>=4.18,<5
+# PyMongo 4.18 drops MongoDB 4.2 (wire version 8), still used by older sites.
+pymongo>=4.17,<4.18
 PyMySQL[rsa]>=1.1.2,<2
 PyYAML
 click
