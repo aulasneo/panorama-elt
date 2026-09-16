@@ -1,0 +1,37 @@
+requirements.in
+  s_ae64a8b5693044::t_fa5bcf911da2e6 3-4
+README.md
+  s_ae64a8b5693044::t_fa5bcf911da2e6 428,436-440
+  s_4d5e201a3c2c3a::t_cc50e569c3aabf 441
+requirements.txt
+  s_ae64a8b5693044::t_96c437dd848312 30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5a6cca900aaca56665ab14d30d499c97666c3a6d",
+  "prompts": {},
+  "humans": {
+    "h_67430f944e00e2": {
+      "author": "Andrés González <andres@aulasneo.com>"
+    }
+  },
+  "sessions": {
+    "s_4d5e201a3c2c3a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0927e-a8c6-73e0-aacd-114b23ad27ea",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Andrés González <andres@aulasneo.com>"
+    },
+    "s_ae64a8b5693044": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0aa5f-c74b-7912-bcee-8ac7eab903e2",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Andrés González <andres@aulasneo.com>"
+    }
+  }
+}
