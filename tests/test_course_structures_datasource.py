@@ -1,4 +1,5 @@
 """Tests for the Open edX course structures datasource logic."""
+import csv
 import types
 
 import pymysql
@@ -182,6 +183,46 @@ def test_get_blocks_counts_problem_weight_from_definition(monkeypatch):
     problem_loc = "block-v1:edX+DemoX+2024+type@problem+block@p1"
     # two response tags in the definition data -> weight of 2
     assert blocks[problem_loc]["weight"] == 2
+
+
+@pytest.mark.parametrize('definitions', [
+    [], [{}], [{'fields': None}], [{'fields': {}}],
+    [{'fields': {'data': None}}], [{'fields': {'data': ''}}],
+])
+@pytest.mark.parametrize('orphaned', [False, True])
+def test_extract_warns_and_uploads_when_problem_data_missing(monkeypatch, caplog, definitions, orphaned):
+    course_id, structure = _course_structure()
+    problem = structure['blocks'][2]
+    problem['fields']['weight'] = None
+    problem['definition'] = '0' * 24
+    if orphaned:
+        structure['blocks'][0]['fields']['children'].remove(['problem', 'p1'])
+    # A valid problem after the incomplete one must still be extracted.
+    structure['blocks'].append({
+        'block_id': 'p2', 'block_type': 'problem',
+        'fields': {'display_name': 'Valid problem', 'weight': 3},
+    })
+    ds = make_cs(monkeypatch, mongodb=FakeMongoDB(FakeModulestore(definitions=definitions)))
+    ds.get_active_versions_mongodb = lambda: {course_id: {
+        'published_branch': 'BR1', 'org': 'edX', 'course': 'DemoX', 'run': '2024',
+    }}
+    ds.get_structures = lambda _: {'BR1': structure}
+    uploaded = []
+
+    def upload(**kwargs):
+        with open(kwargs['filename'], encoding='utf-8') as csv_file:
+            uploaded.extend(csv.DictReader(csv_file))
+
+    ds.datalake = types.SimpleNamespace(upload_table_from_file=upload)
+    ds.extract_and_load()
+
+    rows = {row['block_id']: row for row in uploaded}
+    assert rows['p1']['weight'] == ''
+    assert rows['p2']['weight'] == '3'
+    assert rows['p1']['parent'] == ('' if orphaned else course_id)
+    assert any(record.levelname == 'WARNING' and
+               'No data found in problem block-v1:edX+DemoX+2024+type@problem+block@p1' in record.message
+               for record in caplog.records)
 
 
 def test_get_blocks_skips_missing_structure(monkeypatch):

@@ -166,8 +166,8 @@ def test_zero_problem_weight_does_not_load_definition(monkeypatch):
     assert blocks['block-v1:o+c+r+type@problem+block@p']['weight'] == 0
     structure['b']['blocks'][1]['fields']['weight'] = None
     structure['b']['blocks'][1]['definition'] = '0' * 24
-    with pytest.raises(RuntimeError, match='Missing problem definition'):
-        ds.get_blocks(structure, active)
+    blocks = ds.get_blocks(structure, active)
+    assert blocks['block-v1:o+c+r+type@problem+block@p']['weight'] is None
 
 
 @pytest.mark.parametrize('table', [

@@ -337,8 +337,6 @@ class CourseStructuresDatasource:
                     if weight is None:
                         definition_id = bson.objectid.ObjectId(block.get('definition'))
                         definition = self.mongodb.modulestore.definitions.find_one({'_id': definition_id})
-                        if not definition or 'fields' not in definition:
-                            raise RuntimeError(f'Missing problem definition for {module_location}')
 
                         response_tags = [
                             '<choiceresponse',
@@ -360,7 +358,7 @@ class CourseStructuresDatasource:
                         pattern = '|'.join(response_tags)
 
                         # data is the XML definition of the problem.
-                        data = definition['fields'].get('data')
+                        data = ((definition or {}).get('fields') or {}).get('data')
 
                         if data:
 
@@ -369,7 +367,9 @@ class CourseStructuresDatasource:
                             if not weight:
                                 log.warning(f"No response tag found in problem {module_location}")
                         else:
-                            raise RuntimeError(f"No data found in problem {module_location}")
+                            # Orphaned blocks can lack a definition. Keep their metadata
+                            # and leave the unknown weight empty in the exported CSV.
+                            log.warning("No data found in problem %s; leaving weight unset", module_location)
                 else:
                     # Other blocks than problem don't have a weight
                     weight = ''
