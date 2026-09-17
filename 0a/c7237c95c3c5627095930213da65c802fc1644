@@ -1,0 +1,29 @@
+panorama_elt/course_structures_datasource/course_structures_datasource.py
+  s_80fbc0cf1f5463::t_946642be14136a 361,370-372
+tests/test_verawood_reliability.py
+  s_80fbc0cf1f5463::t_946642be14136a 169-170
+tests/test_course_structures_datasource.py
+  s_80fbc0cf1f5463::t_7451be0c4cc7d0 2,188-225
+  s_80fbc0cf1f5463::t_dfa73368078444 226-227
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0ac7237c95c3c5627095930213da65c802fc1644",
+  "prompts": {},
+  "humans": {
+    "h_67430f944e00e2": {
+      "author": "Andrés González <andres@aulasneo.com>"
+    }
+  },
+  "sessions": {
+    "s_80fbc0cf1f5463": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0ad50-06bb-76b1-9b42-f87793d1b526",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Andrés González <andres@aulasneo.com>"
+    }
+  }
+}
